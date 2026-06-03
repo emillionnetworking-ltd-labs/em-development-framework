@@ -1,0 +1,48 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/anti-rot-allowlist.schema.yml
+title: Anti-Rot Allowlist Registry
+description: >
+  Structural contract for forge/.anti-rot-allowlist.yml. <TICKET-ID>.
+  Documents intentional GRD findings that are accepted (with expiration).
+  Each entry MUST carry expires_at — the allowlist is not a cemetery.
+
+type: object
+required: [version, allowlist]
+additionalProperties: false
+
+properties:
+  version:
+    type: string
+    const: "1.0"
+  allowlist:
+    type: array
+    items:
+      $ref: "#/$defs/entry"
+
+$defs:
+  entry:
+    type: object
+    required: [file, reason, expires_at]
+    additionalProperties: false
+    properties:
+      file:
+        type: string
+        description: Path (repo-rooted) of the file that carries the accepted finding.
+      line_range:
+        type: array
+        minItems: 2
+        maxItems: 2
+        items:
+          type: integer
+          minimum: 1
+      pattern:
+        type: string
+      kind:
+        type: string
+        enum: [broken-path, broken-md-link, file-line-ref, unreachable-sha, absolute-path-flagged]
+      reason:
+        type: string
+        minLength: 10
+      expires_at:
+        type: string
+        format: date

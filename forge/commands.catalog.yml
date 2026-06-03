@@ -1,0 +1,302 @@
+version: "1.0"
+
+# Single machine-readable source of the framework's command surface + the
+# deviation taxonomy (<TICKET-ID>, framework release layer). COMMANDS_REFERENCE.md and /help-framework
+# are VIEWS derived from this file; the test_catalog.py sync test fails CI on drift.
+# The MCP server (forge/tools/mcp_server.py) consumes this catalog programmatically.
+
+commands:
+  # --- Lifecycle skills (the 6-step pipeline; gated by state-machine) ---
+  - name: enrich-us
+    kind: skill
+    category: lifecycle
+    purpose: "Enrich a Jira ticket with full technical detail; bootstrap its state file."
+    invocation: "/enrich-us"
+    gated_by: state-machine
+    user_invocable: false
+  - name: plan
+    kind: skill
+    category: lifecycle
+    purpose: "Produce a schema-validated implementation plan from an enriched ticket."
+    invocation: "/plan"
+    gated_by: state-machine
+    user_invocable: false
+  - name: develop
+    kind: skill
+    category: lifecycle
+    purpose: "Implement the plan on a feature branch; report plan compliance."
+    invocation: "/develop"
+    gated_by: state-machine
+    user_invocable: false
+  - name: verify
+    kind: skill
+    category: lifecycle
+    purpose: "Pre-merge quality gate; classify deviations; issue a verdict."
+    invocation: "/verify"
+    gated_by: state-machine
+    user_invocable: false
+  - name: commit
+    kind: skill
+    category: lifecycle
+    purpose: "Commit, merge to main, and clean up the feature branch."
+    invocation: "/commit"
+    gated_by: state-machine
+    user_invocable: false
+  - name: update-docs
+    kind: skill
+    category: lifecycle
+    purpose: "Write the implementation record; update specs; transition Jira to Done."
+    invocation: "/update-docs"
+    gated_by: state-machine
+
+  # --- Utility skills (operator-invoked any time) ---
+  # NOTE: audit / audit-check / check-api-contract / meta-audit moved to
+  # forge/_parked/playbooks/ (2026-05-30 quarantine — they pointed at NexaCore
+  # paths that left the engine in framework release layer / <TICKET-ID>).
+    user_invocable: false
+  - name: check-pending
+    kind: skill
+    category: utility
+    purpose: "Surface eligible entries from the pending-improvements registry (observation-only)."
+    invocation: "/check-pending"
+    user_invocable: true
+  - name: classify-deviation
+    kind: skill
+    category: utility
+    purpose: "The single code-enforced deviation classifier (per workflow-standards §8); driven by /verify."
+    invocation: "/classify-deviation"
+    user_invocable: true
+  - name: validate-artifact
+    kind: skill
+    category: utility
+    purpose: "Validate one framework artifact against its JSON Schema."
+    invocation: "/validate-artifact"
+    user_invocable: true
+  - name: sprint-cleanup
+    kind: skill
+    category: utility
+    purpose: "Find pending-improvements eligible for closure at sprint-end; require explicit per-id operator approval. Closes the loop of the pending register (<TICKET-ID>)."
+    invocation: "/sprint-cleanup"
+    user_invocable: true
+  - name: help-framework
+    kind: skill
+    category: utility
+    purpose: "Render the command map + framework docs as an interactive in-chat dashboard (reads docs live)."
+    invocation: "/help-framework"
+    user_invocable: true
+  - name: strategy
+    kind: skill
+    category: utility
+    purpose: "Run the Global Native Strategist on a target via the LangGraph engine (framework.cli.run --mode strategy); bounded anti-patch debate -> human gate -> executive report. Never pure-prompt."
+    invocation: "/strategy"
+    user_invocable: true
+  - name: lifecycle
+    kind: skill
+    category: utility
+    purpose: "Operator umbrella: drive a ticket through the 6-step lifecycle via the LangGraph engine (framework.cli.run --mode lifecycle). The 6 step-skills are user-invocable:false playbooks read at the engine's interrupts."
+    invocation: "/lifecycle"
+    user_invocable: true
+  - name: meta-audit
+    kind: skill
+    category: utility
+    purpose: "Dispatch a framework meta-audit subsystem runner (currently: lifecycle only). Read-only mechanical self-check. Restored in <TICKET-ID> framework release layer."
+    invocation: "/meta-audit"
+
+  # --- Tools: lifecycle support (CLI shell + importable lib) ---
+    user_invocable: true
+  - name: state-machine
+    kind: tool
+    category: support
+    purpose: "The lifecycle gate: check / advance / state. Logic in _state_machine.py."
+    invocation: "python3 forge/tools/state-machine.py"
+    user_invocable: true
+  - name: validate-artifact
+    kind: tool
+    category: support
+    purpose: "Validate a .md/.yml artifact against its JSON Schema. Logic in _validate_artifact.py."
+    invocation: "python3 forge/tools/validate-artifact.py"
+    user_invocable: true
+  - name: init-state
+    kind: tool
+    category: support
+    purpose: "Bootstrap a ticket state.yml from the template. Logic in _init_state.py."
+    invocation: "python3 forge/tools/init-state.py"
+    user_invocable: true
+  - name: classify-deviation
+    kind: tool
+    category: support
+    purpose: "The enforced deviation classifier (scripted from /verify, or interactive). Logic in _classify_deviation.py."
+    invocation: "python3 forge/tools/classify-deviation.py"
+
+  # --- Tools: audit machinery (CI gates only post 2026-05-30 quarantine) ---
+  # audit-phase-12..15, audit-delta, list-open-findings moved to forge/_parked/tools/audit/.
+    user_invocable: true
+  - name: audit-completion-check
+    kind: tool
+    category: audit
+    purpose: "Post-audit completion invariants (phase reports + index/summary present)."
+    invocation: "python3 forge/tools/audit-completion-check.py"
+    user_invocable: true
+  - name: audit-coupling-check
+    kind: tool
+    category: audit
+    purpose: "Enforce §22.3 — deferred findings coupled to the pending-improvements registry."
+    invocation: "python3 forge/tools/audit-coupling-check.py"
+
+  # --- Tools: framework operations ---
+  # meta-audit-lifecycle moved to forge/_parked/tools/meta-audit/ on 2026-05-30.
+    user_invocable: true
+  - name: sprint-cleanup
+    kind: tool
+    category: framework
+    purpose: "Closer of the pending-improvements register loop. Per-id operator approval gate. Logic in _sprint_cleanup.py."
+    invocation: "python3 forge/tools/sprint-cleanup.py"
+    user_invocable: true
+  - name: check-pending-improvements
+    kind: tool
+    category: framework
+    purpose: "Report eligibility of the pending-improvements registry."
+    invocation: "python3 forge/tools/check-pending-improvements.py"
+    user_invocable: true
+  - name: anti-rot-checker
+    kind: tool
+    category: framework
+    purpose: "Repo-wide GRD detector. Catches broken paths, broken markdown links, file:line refs, and unreachable SHAs. BLOCKING CI gate."
+    invocation: "python3 forge/tools/anti_rot_checker.py"
+    user_invocable: true
+  - name: verify-checks
+    kind: tool
+    category: framework
+    purpose: "Procedural checks-as-config runner (<TICKET-ID>, framework release layer). Reads forge/.checks-registry.yml and emits a ChecksReport with per-row result enum (passed|failed|skipped-infra|not-applicable). Driven by verify.md Step 4."
+    invocation: "python3 forge/tools/verify-checks.py"
+    user_invocable: true
+  - name: meta-audit-lifecycle
+    kind: tool
+    category: framework
+    purpose: "Mechanical meta-audit of the lifecycle subsystem (4 metrics: idempotency_safe / deterministic_output / predictable_exit_code / context_isolated). Pure-function State+Nodes pipeline; no langgraph dependency. Restored in <TICKET-ID> framework release layer."
+    invocation: "python3 forge/tools/meta-audit/lifecycle.py"
+    user_invocable: true
+  - name: meta-audit-framework-modules
+    kind: tool
+    category: framework
+    purpose: "Mechanical audit of framework module boundaries (8 modules: forge-common / lifecycle-core / framework-quality / meta-audit-suite / orchestrator-graphs / orchestrator-checkpoint / framework-cli-baton / framework-cli-work). 4 nodes: exports drift / import boundary / network I/O policy / cycle detection. AST-based; no langgraph dependency. Added <TICKET-ID> framework release layer; control-plane dropped <TICKET-ID> framework release layer."
+    invocation: "python3 forge/tools/meta-audit/framework_modules.py"
+    user_invocable: true
+  - name: groundedness-snapshot
+    kind: tool
+    category: framework
+    purpose: "Capture / update the groundedness baseline (--update)."
+    invocation: "python3 forge/tools/groundedness-snapshot.py"
+
+  # --- Libraries (import-only; never run directly) ---
+    user_invocable: true
+  - name: state-machine-lib
+    kind: lib
+    category: support
+    purpose: "Lifecycle logic + typed API (apply_advance, evaluate_prereq, load_state_typed, _StateLock)."
+    invocation: "import-only"
+    notes: "_state_machine.py"
+    user_invocable: false
+  - name: validate-artifact-lib
+    kind: lib
+    category: support
+    purpose: "Validation logic + validate_typed() -> ValidationResult."
+    invocation: "import-only"
+    notes: "_validate_artifact.py"
+    user_invocable: false
+  - name: init-state-lib
+    kind: lib
+    category: support
+    purpose: "State bootstrap logic (template-fill)."
+    invocation: "import-only"
+    notes: "_init_state.py"
+    user_invocable: false
+  - name: classify-deviation-lib
+    kind: lib
+    category: support
+    purpose: "Classification logic + classify_typed() -> Deviation."
+    invocation: "import-only"
+    notes: "_classify_deviation.py"
+    user_invocable: false
+  - name: lifecycle-state-lib
+    kind: lib
+    category: support
+    purpose: "LifecycleState / Deviation Pydantic models (mirror of state.schema.yml)."
+    invocation: "import-only"
+    notes: "_lifecycle_state.py"
+    user_invocable: false
+  - name: common-lib
+    kind: lib
+    category: support
+    purpose: "Shared helpers (find_repo_root / find_framework_root, atomic write)."
+    invocation: "import-only"
+    notes: "_common.py"
+    user_invocable: false
+  - name: catalog-lib
+    kind: lib
+    category: support
+    purpose: "Typed loader for this catalog (load_catalog() -> Catalog). Consumed by /help-framework, the MCP server, and test_catalog.py."
+    invocation: "import-only"
+    notes: "_catalog.py"
+    user_invocable: false
+  - name: pending-improvements-lib
+    kind: lib
+    category: framework
+    purpose: "Pydantic typed mirror of pending-improvements.schema.yml (PendingRegistry / PendingImprovementEntry / ResolutionEvidence / Trigger). Anti-drift via round-trip test."
+    invocation: "import-only"
+    notes: "_pending_improvements.py"
+    user_invocable: false
+  - name: sprint-cleanup-lib
+    kind: lib
+    category: framework
+    purpose: "Pure logic for /sprint-cleanup: evaluate_entry, close_entry, select_entries, JiraCredsMissing."
+    invocation: "import-only"
+    notes: "_sprint_cleanup.py"
+    user_invocable: false
+  - name: anti-rot-checker-lib
+    kind: lib
+    category: framework
+    purpose: "Pure logic for anti-rot-checker: R1-R4 regex parsers, resolve_ref, is_real_sha_candidate (3-cascade), scan_repo."
+    invocation: "import-only"
+    notes: "_anti_rot_checker.py"
+    user_invocable: false
+  - name: verify-checks-lib
+    kind: lib
+    category: framework
+    purpose: "Pure logic for verify-checks: CheckResult enum (with SKIPPED_INFRA graceful-degradation), EXECUTORS dict, run_checks orchestrator, report_to_markdown/yaml renderers."
+    invocation: "import-only"
+    notes: "_verify_checks.py"
+
+# Deviation taxonomy (mirrors workflow-standards §8 + DeviationCategory).
+    user_invocable: false
+taxonomy:
+  - category: Accepted-Trivial
+    criteria: "Cosmetic: renamed variable, reordered params, equivalent API."
+    blocks_merge: false
+    creates_ticket: false
+    sprint_target: none
+  - category: Accepted-Quality
+    criteria: "Test omitted, coverage reduced, spec/doc not created."
+    blocks_merge: false
+    creates_ticket: true
+    sprint_target: current
+  - category: Accepted-Risk
+    criteria: "Affects security, auth, error handling, crypto, or data exposure."
+    blocks_merge: true
+    creates_ticket: true
+    sprint_target: current
+  - category: Deferred
+    criteria: "Feature/fix intentionally postponed for scope/complexity."
+    blocks_merge: false
+    creates_ticket: true
+    sprint_target: backlog
+  - category: Pre-existing
+    criteria: "Bug that existed on main before this ticket touched related code."
+    blocks_merge: false
+    creates_ticket: true
+    sprint_target: current
+  - category: Scope-Gap
+    criteria: "Plan step skipped/partial without justification."
+    blocks_merge: true
+    creates_ticket: false
+    sprint_target: none

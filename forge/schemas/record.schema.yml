@@ -1,0 +1,202 @@
+# forge Record artifact schema
+#
+# Validates `.lifecycle/artifacts/<module>/records/<sprint-or-wave>/SCRUM-XX_<scope>.md`.
+# Section list derived from `forge/.playbooks/update-docs.md` (9 base sections;
+# 10th "Audit Finding Verification" required for audit-fix tickets).
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/record.schema.yml
+title: ai-specs Implementation Record
+description: >
+  Post-implementation record produced by /update-docs. Documents what actually
+  happened vs the plan, classifies deviations (importing from verify), tracks
+  follow-ups. Audit-fix tickets require Section 9 (Audit Finding Verification).
+
+type: object
+required: [frontmatter, headings]
+additionalProperties: true
+
+properties:
+
+  # ----- Frontmatter -----
+  frontmatter:
+    type: object
+    required: [schema, ticket, sprint, scope, module, date, branch, commits, is_audit_fix]
+    additionalProperties: false
+    properties:
+      schema:
+        const: ai-specs/schemas/record.schema.yml
+      ticket:
+        type: string
+        pattern: '^[A-Z][A-Z0-9]*-[0-9]+$'
+      sprint:
+        type: string
+        pattern: '^(Sprint [0-9]+|SAT[0-9]+ S[0-9]+|backlog|Wave [0-9]+ - .+)$'
+      scope:
+        type: string
+        enum: [backend, frontend, fullstack]
+      module:
+        type: string
+        pattern: '^[a-z][a-z0-9-]*$'
+      date:
+        type: string
+        format: date
+      branch:
+        type: string
+        pattern: '^(feature|fix)/[A-Z][A-Z0-9]*-[0-9]+(-[a-z0-9-]+)?$'
+      plan_path:
+        type: string
+        description: Pointer to the plan being recorded against.
+      verify_path:
+        type: string
+        description: Pointer to the verify report (deviation classifications imported from here).
+      commits:
+        type: array
+        minItems: 1
+        description: List of commits introduced by this ticket on the feature branch.
+        items:
+          type: object
+          required: [hash, message]
+          additionalProperties: false
+          properties:
+            hash: { type: string, pattern: '^[0-9a-f]{7,40}$' }
+            message: { type: string, minLength: 1 }
+            files: { type: array, items: { type: string } }
+      pr:
+        type: integer
+        description: GitHub PR number.
+      merge_commit:
+        type: string
+        pattern: '^[0-9a-f]{7,40}$'
+      is_audit_fix:
+        type: boolean
+      plan_followed:
+        type: string
+        enum: ["yes", "partial", "no"]
+        description: From record §3 "Plan was followed".
+      framework_version:
+        type: string
+        pattern: '^\d+\.\d+\.\d+$'
+        description: >
+          SemVer 2.0.0 of em-development-framework at the time this record
+          was written. Read from the VERSION file at framework root.
+          Optional for backward compatibility; introduced by <TICKET-ID>.
+          Distinct semantic from audit-phase-report.schema.yml's
+          framework_version field (which carries audit-standards version).
+
+  # ----- Headings -----
+  headings:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      required: [level, text]
+      additionalProperties: true
+      properties:
+        level: { type: integer, minimum: 1, maximum: 6 }
+        text: { type: string, minLength: 1 }
+
+# ----- Reusable section-match definitions -----
+$defs:
+
+  h1_present:
+    type: object
+    description: 'H1 = "Implementation Record: [TICKET-ID] [Feature Name]".'
+    properties:
+      level: { const: 1 }
+      text: { pattern: '^Implementation Record: [A-Z][A-Z0-9]*-[0-9]+' }
+    required: [level, text]
+
+  h2_summary:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Summary' }
+    required: [level, text]
+
+  h2_plan_reference:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Plan Reference' }
+    required: [level, text]
+
+  h2_commits:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Commits' }
+    required: [level, text]
+
+  h2_deviations_from_plan:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Deviations from Plan' }
+    required: [level, text]
+
+  h2_test_results:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Test Results' }
+    required: [level, text]
+
+  h2_bugs_found:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Bugs Found' }
+    required: [level, text]
+
+  h2_documentation_updates:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Documentation Updates' }
+    required: [level, text]
+
+  h2_audit_finding_verification:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Audit Finding Verification' }
+    required: [level, text]
+
+  h2_lessons_learned:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Lessons Learned' }
+    required: [level, text]
+
+# ----- Rules -----
+allOf:
+
+  - properties:
+      headings:
+        contains: { $ref: '#/$defs/h1_present' }
+
+  # Core 8 sections required for ALL records.
+  - properties:
+      headings:
+        allOf:
+          - contains: { $ref: '#/$defs/h2_summary' }
+          - contains: { $ref: '#/$defs/h2_plan_reference' }
+          - contains: { $ref: '#/$defs/h2_commits' }
+          - contains: { $ref: '#/$defs/h2_deviations_from_plan' }
+          - contains: { $ref: '#/$defs/h2_test_results' }
+          - contains: { $ref: '#/$defs/h2_bugs_found' }
+          - contains: { $ref: '#/$defs/h2_documentation_updates' }
+          - contains: { $ref: '#/$defs/h2_lessons_learned' }
+
+  # Audit-fix tickets: Audit Finding Verification mandatory.
+  # (Satisfies audit-standards.mdc §6.3 Post-Fix Verification + §6.3.2 Recurrence Prevention).
+  - if:
+      properties:
+        frontmatter:
+          properties: { is_audit_fix: { const: true } }
+    then:
+      properties:
+        headings:
+          contains: { $ref: '#/$defs/h2_audit_finding_verification' }

@@ -1,0 +1,148 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://em-development-framework/schemas/forge-workspace.schema.yml
+title: Forge Workspace Configuration
+description: >
+  The workspace contract consumed symbolically by agent personas in
+  forge/.agents/. Declares the governed project's layout (backend_root,
+  frontend_root, specs_root, etc.), custom standards paths, and stack
+  metadata. Authored <TICKET-ID> framework release layer to decouple personas from any
+  specific product narrative.
+
+type: object
+additionalProperties: false
+
+required:
+  - schema_version
+  - product_name
+  - specs_root
+  - stack_metadata
+
+properties:
+  schema_version:
+    description: >
+      Anchor for schema migrations. framework release layer introduced the migration
+      framework (MIGRATIONS registry). framework release layer (Pilar 1.2 runtime
+      injection) is the first real schema bump 1.0.0 -> 1.1.0;
+      added the `runtime_injection_enabled` feature flag for the
+      mechanical workspace injection at motor LangGraph runtime.
+    type: string
+    const: "1.1.0"
+
+  product_name:
+    description: >
+      Short slug identifying the governed product (e.g. "my-product",
+      "acme-platform"). Lowercase, alphanumeric + hyphens.
+    type: string
+    pattern: ^[a-z][a-z0-9-]*$
+    minLength: 2
+    maxLength: 40
+
+  backend_root:
+    description: >
+      Path (relative to repo root) where the backend domain lives. null
+      if this product has no backend domain (e.g. frontend-only project).
+    type: [string, "null"]
+    default: null
+
+  frontend_root:
+    description: >
+      Path (relative to repo root) where the frontend domain lives. null
+      if this product has no frontend domain.
+    type: [string, "null"]
+    default: null
+
+  specs_root:
+    description: >
+      Path (relative to repo root) where lifecycle/specs/ + product
+      standards live. Conventional location: "lifecycle/specs".
+    type: string
+    default: "lifecycle/specs"
+
+  integration_state_path:
+    description: >
+      Path to the integration-state document (module dependencies,
+      guard chains). null if the product does not maintain one.
+    type: [string, "null"]
+    default: null
+
+  data_model_path:
+    description: >
+      Path to the entity/data-model spec. null if the product does not
+      maintain one (e.g. UI-only or library-only project).
+    type: [string, "null"]
+    default: null
+
+  api_spec_path:
+    description: >
+      Path to the API specification (OpenAPI/YAML). null if the product
+      does not expose a documented API.
+    type: [string, "null"]
+    default: null
+
+  custom_standards:
+    description: >
+      Free-form map of named standard documents the personas may
+      reference. Keys are short identifiers (e.g. "workflow",
+      "backend", "audit"); values are paths relative to repo root.
+      Personas resolve via ${custom_standards.<key>} symbolic refs.
+    type: object
+    additionalProperties:
+      type: string
+      minLength: 1
+    default: {}
+
+  stack_metadata:
+    description: >
+      Language + framework metadata the personas use to adapt their
+      reasoning (which conventions, which libraries to expect, etc.).
+    type: object
+    additionalProperties: false
+    required:
+      - language
+      - framework
+    properties:
+      language:
+        description: Primary language of the governed product.
+        enum:
+          - typescript
+          - python
+          - go
+          - rust
+          - java
+          - ruby
+          - kotlin
+          - swift
+          - mixed
+      framework:
+        description: >
+          Primary framework (e.g. "NestJS", "Django", "FastAPI",
+          "Rails", "Next.js", "Spring Boot"). Free-form string for
+          flexibility; not enumerated.
+        type: string
+        minLength: 1
+      version:
+        description: Framework major version (e.g. "11", "14", "5.x").
+        type: string
+
+  feature_flags:
+    description: >
+      Boolean map of optional behaviors the framework enables for this
+      product (e.g. auth_change_control_strict, meta_audit_blocking).
+      Personas + tools consume specific known flags; unknown flags are
+      ignored gracefully.
+    type: object
+    additionalProperties:
+      type: boolean
+    default: {}
+
+  runtime_injection_enabled:
+    description: >
+      <TICKET-ID> framework release layer (Pilar 1.2): feature flag for mechanical workspace
+      injection at motor LangGraph runtime. When true (default),
+      framework/cli/run.py loads this config at session build time and
+      exposes it in each WorkRequest payload (context.workspace dict) so
+      agents consume the workspace symbolically without reading the YAML
+      file textually. Operators can set false to disable injection for
+      debugging or back-compat with pre-Wave-31 agents.
+    type: boolean
+    default: true

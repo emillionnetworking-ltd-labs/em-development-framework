@@ -1,0 +1,7 @@
+# Groundedness validator allowlist (<TICKET-ID> / cross-cutting-policies.mdc §1.4).
+# References listed here are skipped by validate-artifact.py --strict-groundedness.
+# Use sparingly — every entry is a deliberate "we know this ref does not resolve".
+
+pr_refs: []        # PR-number literals to skip (e.g., "#9999" from audit examples)
+sha_refs: []       # SHA literals to skip
+file_line_refs: [] # "<path>:<line>" literals to skip

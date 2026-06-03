@@ -1,0 +1,98 @@
+# Framework module boundary schema (<TICKET-ID>, framework release layer).
+#
+# Governs `forge/.framework-modules.yml` — the SSoT declaring the framework's
+# 8 internal modules with their charters, public exports, allowed imports,
+# network I/O policy, owned data files, and optional stable baseline.
+#
+# The 2nd meta-audit subsystem (`framework_modules.py`) walks each module
+# entry and verifies the declarations against the actual source tree via AST
+# analysis. Boundary violations (imports outside allowed_imports, symbols not
+# in public_exports, etc.) are surfaced as diagnostics.
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/framework-module.schema.yml
+title: Framework Module Boundary
+description: >
+  Single source of truth for the framework's internal module boundaries.
+  The meta-audit framework-modules runner consumes this file to verify the
+  declared boundaries against the actual source tree.
+
+type: object
+required: [modules]
+additionalProperties: false
+
+properties:
+  modules:
+    type: array
+    minItems: 4
+    description: One entry per logical framework module.
+    items:
+      type: object
+      required: [name, path, files, charter, public_exports, allowed_imports, network_io_policy]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*$'
+          description: Unique module identifier in kebab-case.
+        path:
+          type: string
+          minLength: 5
+          description: Human-readable narrative path description (informational; for operators).
+        files:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: >
+            Explicit list of repo-relative .py files belonging to this module.
+            Machine-actionable (the runner uses this exact list, not `path`).
+            One file MUST belong to AT MOST one module.
+        charter:
+          type: string
+          minLength: 30
+          description: One-paragraph statement of purpose and boundary.
+        public_exports:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: >
+            Whitelist of symbol names (functions, classes, constants) other
+            modules are allowed to import. Importing any symbol outside this
+            list from another module is a boundary violation.
+        allowed_imports:
+          type: array
+          items:
+            type: string
+          description: >
+            List of other module names this module may import from. An empty
+            list means leaf module (stdlib-only). Cycles are forbidden.
+        network_io_policy:
+          type: string
+          enum: [none, subprocess-only, rest-allowlisted, general]
+          description: >
+            Declares the module's I/O envelope. none = pure compute;
+            subprocess-only = shells out to git/gh/jira CLI; rest-allowlisted
+            = HTTP to declared hosts; general = unrestricted (agent muscle only).
+        data_files_owned:
+          type: array
+          items:
+            type: string
+          description: >
+            List of canonical data files the module is authoritative for and
+            allowed to write. Other modules may only read.
+        stable_baseline:
+          type: object
+          additionalProperties: false
+          description: Optional pin to the last sealed surface (for drift detection).
+          properties:
+            commit_sha:
+              type: string
+              pattern: '^[0-9a-f]{7,40}$'
+            sealed_date:
+              type: string
+              format: date
+        tests_path:
+          type: string
+          description: Optional repo-relative path where tests for this module live.

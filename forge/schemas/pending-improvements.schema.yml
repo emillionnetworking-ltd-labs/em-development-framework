@@ -1,0 +1,128 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/pending-improvements.schema.yml
+title: Pending Improvements Registry
+description: >
+  Structural contract for forge/registers/pending-improvements.yml. <TICKET-ID>.
+  Consolidates pending framework improvements with auto/manual triggers for
+  pause-friendly solo-operator observation.
+
+type: object
+required: [version, generated_at, entries]
+additionalProperties: false
+
+properties:
+  version:
+    type: string
+    const: "1.0"
+    description: Bumped on breaking shape changes.
+  generated_at:
+    type: string
+    format: date
+  entries:
+    type: array
+    items:
+      $ref: "#/$defs/entry"
+
+$defs:
+  entry:
+    type: object
+    required: [id, source, status, trigger]
+    additionalProperties: false
+    # <TICKET-ID>: conditional gate — closing requires evidence trail.
+    allOf:
+      - if:
+          properties: { status: { const: done } }
+          required: [status]
+        then:
+          required: [resolution_evidence]
+    properties:
+      id:
+        type: string
+        pattern: '^[a-z][a-z0-9-]*$'
+        description: Kebab-case slug, unique across the registry.
+      source:
+        type: string
+        minLength: 5
+        description: Origin attribution (audit chapter, follow-up doc, ADR, etc.)
+      status:
+        type: string
+        enum: [waiting, eligible, manual-check-due, done, withdrawn]
+      trigger:
+        type: object
+        required: [type]
+        additionalProperties: false
+        properties:
+          type:
+            type: string
+            enum: [auto, manual]
+          check:
+            type: string
+            description: Shell command for auto; one-line description for manual.
+          timeout_seconds:
+            type: integer
+            minimum: 1
+            maximum: 60
+          aspirational:
+            type: boolean
+            default: false
+            description: >
+              True if the trigger depends on infrastructure that is not yet
+              built in this repo (e.g., Phase 4 telemetry tooling per ADR-007).
+              Marks the entry as exempt from the bi-directional trigger health
+              guard (test_pending_improvements_triggers.py) — its filesystem
+              path references are not expected to resolve. <TICKET-ID> (framework release layer).
+      last_checked:
+        type: string
+        format: date
+      next_check:
+        type: string
+        format: date
+      cost_estimate:
+        type: string
+        description: Free-form estimate (e.g. "1h", "1-2 days").
+      value_estimate:
+        type: string
+        enum: [low, medium, high, critical]
+      note:
+        type: string
+      created_at:
+        type: string
+        format: date
+      # ----- <TICKET-ID>: sprint-cleanup automation surface (additive) -----
+      sprint:
+        type: string
+        pattern: '^(Sprint [0-9]+|SAT[0-9]+ S[0-9]+|backlog|Wave [0-9]+ - .+)$'
+        description: >
+          Sprint in which this debt was contracted. Required by /sprint-cleanup
+          to scope its filter. Cross-sprint entries (future-*, audit-meta)
+          leave this null.
+      jira_ticket:
+        type: string
+        pattern: '^[A-Z][A-Z0-9]*-[0-9]+$'
+        description: >
+          Linked Jira ticket if opened. When set, /sprint-cleanup can query
+          Jira to auto-detect resolution (evidence source A2).
+      resolution_evidence:
+        type: object
+        description: >
+          Populated on transition to status=done via /sprint-cleanup.
+          Append-only audit trail. Required when status=done (allOf above).
+        additionalProperties: false
+        required: [closed_at, closed_by, closed_at_sprint]
+        properties:
+          closed_at:
+            type: string
+            format: date
+          closed_by:
+            type: string
+            enum: [jira-ticket-done, operator-approved]
+            description: >
+              Which closure source fired. <TICKET-ID> design review removed
+              `auto-trigger-failed`: existing triggers signal eligibility
+              ('ready to work'), not closure ('work is done'). A1 stays as a
+              diagnostic field in the report but never closes an entry.
+          closed_at_sprint:
+            type: string
+            pattern: '^(Sprint [0-9]+|SAT[0-9]+ S[0-9]+|backlog|Wave [0-9]+ - .+)$'
+          note:
+            type: string

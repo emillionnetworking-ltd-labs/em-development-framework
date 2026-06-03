@@ -1,0 +1,138 @@
+---
+version: 1.0.2
+status: active
+category: spec
+description: "5-tier dependency-health cadence: pinning rules, vulnerability scan policy, upgrade triggers per tier."
+last_changed: 2026-06-02
+alwaysApply: false
+license: MIT
+copyright: "Copyright (c) 2026 EMillion Networking LTD"
+---
+
+> **Modular spec extracted from `workflow-standards.mdc` per ADR-012 (framework release layer <TICKET-ID>).** Read on demand when the activation trigger fires (see `workflow-standards.mdc §0 Specs Index`). Originally numbered §X in the Core file; section numbers below restart at §1 within this modular file.
+
+## 1. Dependency Health Posture (5-tier cadence)
+
+**Purpose**: keep the codebase on supported, security-patched dependencies *without* requiring anyone to remember to "run an audit". The system pushes problems at you; you don't pull. This section codifies the 5 layers that together turn dependency hygiene from a manual chore into an enforced posture.
+
+**Origin**: <TICKET-ID> + <TICKET-ID> incident (2026-03-11 → 2026-05-08). The team accumulated 25 stale branches, 197 failed CI runs, 1 critical + 25 high CVEs, and 5 unpatched Next 14.x CVEs because (a) GitHub native security alerts were disabled, (b) CI was not a real gate, and (c) no periodic process surfaced drift. The 5-tier cadence below prevents recurrence.
+
+### Tier 1 — Real-time push (seconds, automated)
+
+**Trigger**: a CVE drops upstream against a dependency in `package-lock.json`.
+
+| Mechanism | Required state | How to verify |
+|---|---|---|
+| **GitHub Dependabot Alerts** | `vulnerability_alerts: enabled` repo setting | `gh api repos/{owner}/{repo} --jq '.security_and_analysis.dependabot_security_updates'` → `enabled` |
+| **Automated Security Updates** | `automated_security_fixes: enabled` repo setting | Same query as above. Auto-opens PR with the fix |
+| **Email + Bell notifications** | Repo watcher with "Security alerts" enabled in user settings | Profile → Notifications → ensure security alerts are not muted |
+
+**Apply (one-time, on every repository in EM Ecosystem)**:
+```bash
+gh api -X PUT repos/{owner}/{repo}/vulnerability-alerts
+gh api -X PUT repos/{owner}/{repo}/automated-security-fixes
+```
+
+Without these enabled, GitHub's native security infrastructure runs but produces no notifications. This is the single highest-leverage configuration in the entire posture.
+
+### Tier 2 — CI gate (immediate at PR time)
+
+**Trigger**: any PR (human or dependabot) that introduces a new high/critical npm audit finding.
+
+| Mechanism | Required state |
+|---|---|
+| Branch protection on `main` | required-status-checks includes Layer 2 Dependency Audit (both packages); see Section 2 Required Repository Configuration B |
+| Workflow `security.yml` Layer 2 jobs | run on every PR (existing) |
+| Workflow `security.yml` Security Gate (final) | required (existing) |
+
+Without branch protection enforcing Layer 2 (planned in <TICKET-ID>), Tier 1 alerts become advisory: someone can ignore them and merge anyway. The gate is what turns "we know" into "we cannot proceed".
+
+### Tier 3 — Weekly safety net (Monday 06:00 UTC, automated)
+
+**Trigger**: scheduled cron job runs `npm audit` against current `main`, opens or updates a tracking issue if any high/critical vuln remains, ages out closed items, alerts on PR staleness.
+
+| Job | File | Behaviour |
+|---|---|---|
+| Full Dependency Audit | `.github/workflows/weekly-audit.yml` (existing) | runs `npm audit` per package matrix |
+| **Dependency Health Issue (NEW)** | extension to `weekly-audit.yml` | opens/updates a single permanent `[dep-health]` issue with the current vuln counts and breakdown |
+| Branch Hygiene Audit | `weekly-audit.yml` (added 2026-05-08, the framework release layer branch-hygiene-audit commit) | lists branches merged but not deleted, opens issue if drift detected |
+| **Stale Dependabot PR Alerter (NEW)** | extension to `weekly-audit.yml` | opens issue if any dependabot PR open >14 days without activity |
+
+This tier guarantees that "no notifications fired" never means "nothing was wrong" — the cron job confirms zero-state actively.
+
+### Tier 4 — EOL tracker (proactive, 90-day lead time)
+
+**Trigger**: scheduled cron job queries `endoflife.date` API for each critical framework (Node, Next, React, NestJS, Prisma, Tailwind, ESLint, TypeScript). When any framework's currently-installed major version is within 90 days of its declared EOL, the workflow opens a tracking issue with a migration-plan template.
+
+| Job | File | Frequency |
+|---|---|---|
+| **EOL Tracker (NEW)** | new workflow (or job in `weekly-audit.yml`) | weekly, but issue threshold = 90 days from EOL |
+
+**Why 90 days**: a major migration ticket needs `/plan + /develop + /verify + /commit + /update-docs` cycles, plus testing under realistic load. 90 days lead time is the industry minimum to plan, schedule, and execute without rushed risk.
+
+**Tracked frameworks (initial)**:
+- `nodejs` (currently Node 22 — track LTS schedule)
+- `next.js` (currently 14.2.x — already 5 CVEs unpatched, 14.x has limited support window)
+- `react` (currently 18.3.1 — 19 is current)
+- `typescript` (incremental, but 5.7+ is current; 5.4 is behind)
+- `tailwindcss` (currently 3.4 — 4.x is current, 3.x supported until further notice)
+- `eslint` (currently 8.x — **EOL since 2024-09**; immediate migration ticket)
+- `nestjs` (currently 11.x — 12 not yet released)
+- `prisma` (currently 7.x — current)
+
+### Tier 5 — Quarterly + annual review (human, scheduled)
+
+**Trigger**: explicit calendar entry; not automated.
+
+| Cadence | Activity | Output |
+|---|---|---|
+| **Monthly** (1st Monday) | 30-min triage of Tier 3 issues + Tier 4 tickets | If any major bump >6 weeks in the open backlog, schedule a migration ticket |
+| **Quarterly** (sprint planning) | Dependency Health Posture + **Audit WARN Register review** (`audit-warn-register.md`) | Decide if a "Migration Sprint" is warranted; re-classify any WARN trending ↑ to Jira ticket; confirm Accepted-Risk items are still acceptable (next: **2026-08-09**) |
+| **Annual** | Full security audit per `manual-security-plan.md` + WARN Register full pass | Updated SBOM, license audit, framework retrospective, posture document refresh, WARN backlog re-prioritization |
+
+### Major Bump SLA
+
+The team's policy on how far behind a critical framework can be:
+
+| Framework category | Maximum lag from latest stable | Trigger for migration ticket |
+|---|---|---|
+| **Critical (Next, NestJS, Prisma, React, Node LTS)** | 1 major version | When upstream releases N+1 stable, plan migration before N reaches EOL |
+| **Tooling (TypeScript, ESLint, Tailwind)** | 1 major version | Same |
+| **Build (Webpack, Vite, postcss)** | 2 major versions | Lower priority unless blocking |
+| **Types (`@types/*`)** | Match runtime engine version | If using Node 22, `@types/node` should be `^22.x` |
+
+A framework being on a fully-EOL major (e.g. ESLint 8 today) is an automatic HIGH-priority migration ticket regardless of the matrix above.
+
+### Roles and notification routing
+
+| Role | Tier 1-2 | Tier 3-4 | Tier 5 |
+|---|---|---|---|
+| **Repo maintainer** (currently @emillionnetworking-ltd-labs) | email + bell + assigned to auto-issues | reviewer of weekly tracking issue | owner of monthly + quarterly review |
+| **AI agent (Claude)** | does NOT auto-resolve security alerts | can be invoked to /plan a migration ticket from an EOL issue | input for posture review, not decision-maker |
+| **Auto-merge** | only patch + types in devDeps after CI passes | n/a | n/a |
+
+### Non-goals of this section
+
+- This is NOT a substitute for application-level threat modeling.
+- This is NOT a substitute for the audit framework — see `audit-standards.mdc`. Tier 5 annual review FEEDS the audit framework, not replaces it.
+- This is NOT a substitute for code review — Tier 2 is technical gate, code review is human gate, both are required.
+
+### Implementation status (as of 2026-05-08)
+
+| Tier | Status |
+|---|---|
+| 1 — Dependabot alerts + auto-security-updates | **enabled** (API call 2026-05-08, applied during <TICKET-ID> strategic review) |
+| 1 — Secret scanning (basic) | **enabled** |
+| 1 — Secret scanning (validity checks, non-provider patterns) | requires GitHub Advanced Security license |
+| 1 — Dependabot grouping config (reduce PR noise) | **NOT YET** — tracked as <TICKET-ID> (open, low effort) |
+| 2 — Branch protection on main | **NOT YET — UNBLOCKED 2026-05-08** by <TICKET-ID> merge ((historical commit, pre-rename)). Tracked as <TICKET-ID>, ready for policy decisions. |
+| 3 — weekly-audit.yml dependency audit | **enabled** (existing) |
+| 3 — weekly-audit.yml Dependency Health Issue extension | **NOT YET** — tracked as <TICKET-ID> (open) |
+| 3 — weekly-audit.yml stale-dependabot-PR alerter | **NOT YET** — tracked as <TICKET-ID> (open) |
+| 3 — Branch Hygiene Audit job | **enabled** (the framework release layer branch-hygiene-audit commit, added 2026-05-08) |
+| 4 — EOL tracker workflow | **NOT YET** — tracked as <TICKET-ID> (open) |
+| 5 — Monthly + quarterly + annual review process | **NOT YET** — tracked as <TICKET-ID> (open, docs-only) |
+| Migration backlog | **<TICKET-ID> DONE** (commit (historical commit, pre-rename), PR #262, 2026-05-08): Next 14 → 16.2.6 + React 18 → 19.2.6 in dashboard + satellite. First 9/9 green Security Pipeline on `main` since 2026-03-11. Follow-up majors still open in internal cycle: **TS 5→6 (<TICKET-ID> ✅ DONE 2026-05-08, commit (historical commit, pre-rename) — all 3 packages)**, **ESLint 9→10 (<TICKET-ID> ✅ DONE 2026-05-09, commit (historical commit, pre-rename) — api only; frontend deferred to <TICKET-ID> because eslint-plugin-react uses removed ESLint 9 API)**, **Tailwind 3→4 (<TICKET-ID> ✅ DONE 2026-05-09, commit (historical commit, pre-rename) — both packages on 4.3.0; designTokens moved to src/lib/design-tokens.ts; manual visual QA recommended)**, **Jest 29→30 (<TICKET-ID> ✅ DONE 2026-05-08, commit (historical commit, pre-rename) — closed 4 jsdom lows)**, **lucide-react 0→1 (<TICKET-ID> ✅ DONE 2026-05-08, commit (historical commit, pre-rename) — dashboard now on 1.14.0; replaced removed Github icon with project-local SVG)**, **@types/node align Node 22 (<TICKET-ID> ✅ DONE 2026-05-08, commit (historical commit, pre-rename))**, **Re-enable react-hooks v6 rules + 126 patterns (<TICKET-ID> ✅ DONE 2026-05-09, commit (historical commit, pre-rename) — audit found patterns canonical, rules kept disabled with formal rationale until react-hooks v7)** |
+
+When all tiers are operational, dependency drift will surface within hours, not weeks, and the team will spend zero time "running audits" — the system delivers the work.
+

@@ -1,0 +1,73 @@
+---
+version: 1.0.2
+status: active
+category: spec
+description: "Conventions for FULL audit sprints: 15-phase pipeline coordination, evidence gathering, findings disposition."
+last_changed: 2026-06-02
+alwaysApply: false
+license: MIT
+copyright: "Copyright (c) 2026 EMillion Networking LTD"
+---
+
+> **Modular spec extracted from `workflow-standards.mdc` per ADR-012 (framework release layer <TICKET-ID>).** Read on demand when the activation trigger fires (see `workflow-standards.mdc §0 Specs Index`). Originally numbered §X in the Core file; section numbers below restart at §1 within this modular file.
+
+## 1. Audit Sprint Convention (MANDATORY for FULL audits)
+
+Every `/audit <module> full` run creates a dedicated audit sprint to hold the
+parent audit report ticket and all child audit-fix tickets generated from FAIL
+findings. The sprint lifecycle mirrors the audit's PDCA loop: opened at audit
+start, closed when all audit-fix tickets are Done. Parallel to §11 (Satellite
+Sprint Convention) — both are MANDATORY sprint-naming conventions, scoped to
+different domains.
+
+### Naming
+
+| Field | Value |
+|---|---|
+| **Sprint name** | `Audit <module> <YYYY-MM-DD>` (≤ 30 chars) |
+| **Example** | `Audit auth 2026-05-14` (21 chars) |
+| **Date** | UTC date the audit was started (matches the `audit-YYYY-MM-DDTHH-MM/` folder prefix) |
+| **Board** | `SCRUM board` (id=1) — same board as feature sprints |
+| **Initial state** | `future` (created before any tickets exist) |
+
+> **Sprint name max length is 30 characters in Jira.** With module slugs up to
+> ~10 chars, `Audit <m> <YYYY-MM-DD>` stays within budget. If a module's slug
+> would push past 30 chars, truncate the module name in the sprint title (NOT
+> the date — date is the searchable anchor).
+
+### Lifecycle
+
+| Step | When | Action |
+|---|---|---|
+| 1 | At `/audit <m> full` invocation | Create sprint `Audit <m> <today>` in `future` state. If the sprint already exists (e.g., audit was restarted same day), reuse it. |
+| 2 | After Phase 11 (Module Completion Report) is written | Create parent ticket `Audit Report: <Module> Module (<date>)` (see `audit-standards.mdc` §11.8) and assign it to the audit sprint. |
+| 3 | For each FAIL finding | Create child `Audit Fix: <Check ID> — <brief>` ticket and assign to the same audit sprint. |
+| 4 | When all audit-fix tickets transition to Done (per `/audit-check`) | Transition the sprint to `active` (if needed) then to `closed`. The completion timestamp closes the PDCA loop opened at step 1. |
+| 5 | Optional | Rename the closed sprint to add a verdict suffix, e.g., `Audit auth 2026-05-14 ✓` — keeping the original prefix intact. |
+
+### Why a dedicated sprint per audit
+
+Mixing audit-fix tickets with feature-sprint tickets:
+- **Hides remediation progress** — audit FAILs and feature work compete for the same burndown chart.
+- **Makes audit cadence invisible** — there is no Jira-level signal that an audit was run on date X.
+- **Breaks traceability for `/audit-check`** — the PDCA "Check" phase queries tickets by sprint; mixing scopes forces ad-hoc JQL.
+
+Dedicated audit sprints make the audit verdict ↔ remediation ↔ closure cycle explicit and queryable.
+
+### Audit sprint vs feature sprint — interaction
+
+The 6-phase ticket lifecycle (`/enrich-us` → `/plan` → `/develop` → `/verify` →
+`/commit` → `/update-docs`) does NOT change for audit-fix tickets. They go
+through the same gates as feature tickets — they just live in the audit
+sprint. When a fix triggers follow-up work that is NOT in scope of the audit
+finding itself, that follow-up is filed as a new Jira ticket via the
+standard Mode C path into a normal feature sprint, not back into the audit
+sprint.
+
+### Cross-references
+
+- `audit-standards.mdc` §11.8 (Jira Integration) — sprint assignment step.
+- `forge/_parked/playbooks/audit.md` Step 4 (Jira integration) — runtime enforcement.
+- `forge/_parked/playbooks/audit-check.md` — closes the PDCA loop; sprint-scoped query relies on this convention.
+- §11 (Satellite Sprint Convention) — parallel pattern for SAT projects.
+

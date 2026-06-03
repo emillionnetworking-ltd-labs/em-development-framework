@@ -1,0 +1,9 @@
+# Orchestrator (framework release layer) — application deps, ISOLATED from ai-specs/ and control-plane/.
+# ai-specs stays spec/metadata only; this dir is the LangGraph app layer.
+# Pins reconciled to the VALIDATED runtime (<TICKET-ID>): langgraph 1.2.2 + checkpoint 4.1.1.
+# The two packages version independently; checkpoint 4.x carries the serde
+# allowed_msgpack_modules API the <TICKET-ID>/560 fixes rely on.
+langgraph>=1,<2
+langgraph-checkpoint>=4,<5
+pydantic>=2,<3
+pyyaml>=6,<7

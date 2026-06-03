@@ -1,0 +1,180 @@
+# forge Global Freeze Status schema
+#
+# Validates the global freeze-status document under specs/ — the GLOBAL file
+# that aggregates the current `status` of every module in the framework. Read by:
+#
+#   - check-freeze.py (FW-106) — CI gate that blocks PRs touching stable/frozen
+#     modules without the `unfreeze-<module>` label.
+#   - the future ecosystem dashboard (framework release layer §4.2).
+#
+# Aspirational: the validated artifact and its check-freeze.py consumer were not
+# built post-<TICKET-ID> cross-repo decoupling (parallel to ADR-007 Phase 4
+# deferral). Schema preserved for future activation.
+#
+# Stays in sync with the per-module `module-charter.md` `status` field;
+# divergence is caught by Phase 11 audit (framework release layer) once it lands.
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/freeze-status.schema.yml
+title: ai-specs Global Freeze Status
+description: >
+  Single-file cross-module status registry. Each module's status is the
+  source of truth used by the freeze CI gate. framework release layer / Capa 2 (Modularity).
+
+type: object
+required: [frontmatter, headings]
+additionalProperties: true
+
+properties:
+
+  frontmatter:
+    type: object
+    required: [schema, last_updated, modules]
+    additionalProperties: false
+    properties:
+
+      schema:
+        const: ai-specs/schemas/freeze-status.schema.yml
+
+      last_updated:
+        type: string
+        format: date
+
+      modules:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          required: [name, status, charter, since]
+          additionalProperties: false
+          properties:
+
+            name:
+              type: string
+              pattern: '^[a-z][a-z0-9-]*$'
+              description: Module slug; must match the corresponding charter.module.
+
+            status:
+              type: string
+              enum: [active, stable, frozen, deprecated]
+              description: >
+                Mirrors the value in `module-charter.md` frontmatter. If
+                divergence is detected (Phase 11), one of the files is stale.
+
+            charter:
+              type: string
+              pattern: '^specs/modules/[a-z][a-z0-9-]*/module-charter\.md$'
+              description: Relative path from forge/ to the charter file.
+
+            boundary:
+              type: string
+              pattern: '^specs/modules/[a-z][a-z0-9-]*/module-boundary\.md$'
+              description: Relative path to module-boundary.md if it exists.
+
+            baseline:
+              type: string
+              pattern: '^specs/modules/[a-z][a-z0-9-]*/stable-baseline\.md$'
+              description: Required if status IN {stable, frozen}.
+
+            since:
+              type: string
+              format: date
+              description: Date the module entered its current status.
+
+            last_audit:
+              type: string
+              pattern: '^audit-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}$'
+              description: Folder of the audit supporting this status. Required for stable/frozen.
+
+            # ----- Frozen-only fields -----
+            frozen_at:
+              type: string
+              format: date
+              description: When the module was frozen (required when status=frozen).
+
+            frozen_by:
+              type: string
+              minLength: 1
+              description: Who froze it (required when status=frozen).
+
+            frozen_reason:
+              type: string
+              minLength: 10
+              description: Why it was frozen (required when status=frozen).
+
+            unfreeze_label:
+              type: string
+              pattern: '^unfreeze-[a-z][a-z0-9-]*$'
+              description: >
+                Required label on PRs touching this module. Derived from
+                module name (convention: `unfreeze-<module>`). Optional
+                explicit override; defaults to `unfreeze-<name>`.
+
+            approvals_required:
+              type: integer
+              minimum: 1
+              description: >
+                Minimum reviewers required on an unfreeze-labeled PR. Mirrors
+                baseline.breaking_changes.approvals.
+
+  headings:
+    type: array
+    minItems: 4
+    items:
+      type: object
+      required: [level, text]
+      additionalProperties: true
+      properties:
+        level: { type: integer, minimum: 1, maximum: 6 }
+        text: { type: string, minLength: 1 }
+
+# ----- Per-entry conditional rules -----
+allOf:
+
+  # H1 + required H2 sections
+  - properties:
+      frontmatter:
+        properties:
+          modules:
+            items:
+              allOf:
+                # If status IN {stable, frozen} -> baseline + last_audit required
+                - if:
+                    properties: { status: { enum: [stable, frozen] } }
+                  then:
+                    required: [baseline, last_audit]
+
+                # If status=frozen -> additionally frozen_at, frozen_by, frozen_reason required
+                - if:
+                    properties: { status: { const: frozen } }
+                  then:
+                    required: [frozen_at, frozen_by, frozen_reason]
+
+  # Required H2 sections in body
+  - properties:
+      headings:
+        allOf:
+          - contains:
+              type: object
+              properties:
+                level: { const: 1 }
+                text: { pattern: '^Global Freeze Status' }
+              required: [level, text]
+          - contains:
+              type: object
+              properties:
+                level: { const: 2 }
+                text: { pattern: '^Status overview' }
+              required: [level, text]
+          - contains:
+              type: object
+              properties:
+                level: { const: 2 }
+                text: { pattern: '^Freeze ritual' }
+              required: [level, text]
+          - contains:
+              type: object
+              properties:
+                level: { const: 2 }
+                text: { pattern: '^Unfreeze ritual' }
+              required: [level, text]

@@ -1,0 +1,156 @@
+# forge bypass-log schema
+#
+# Validates `forge/bypass-log.yml` — append-only log of every git hook
+# bypass (`--no-verify` flag on commit/push, or other intentional skip).
+#
+# Why this exists: the audit 2026-05-13 found that hook bypass had been
+# normalized (3 of 4 AUTH wave tickets used --no-verify). Without tracking,
+# each successful bypass teaches the agent that the next bypass is safer.
+# This log + the pre-merge gate (FW-034) reverses that signal.
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/bypass-log.schema.yml
+title: ai-specs Bypass Log
+description: >
+  Append-only registry of every intentional skip of a pre-commit / pre-push /
+  pre-merge gate. Written by /log-bypass. Read by the CI pre-merge gate to
+  classify bypass.reason against known patterns.
+
+type: object
+required: [version, entries]
+additionalProperties: false
+
+properties:
+
+  version:
+    type: integer
+    const: 1
+    description: Schema version. Bump if entry shape changes incompatibly.
+
+  known_reasons:
+    type: array
+    description: >
+      Patterns recognized as legitimate bypass reasons. New bypasses whose
+      reason matches one of these patterns pass the pre-merge gate silently.
+      Anything else requires explicit approval. Maintained centrally; new
+      patterns added via PR review (not by /log-bypass automatically).
+    items:
+      type: object
+      required: [id, pattern, rationale]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*$'
+          description: Stable identifier (kebab-case).
+        pattern:
+          type: string
+          description: ECMAScript regex matched against `entry.reason` (case-insensitive).
+        rationale:
+          type: string
+          minLength: 10
+          description: Why this pattern is recognized. Refer to spec sections (e.g., framework-upgrade-playbook.mdc §1.6.7).
+        first_seen:
+          type: string
+          format: date
+        approved_by:
+          type: string
+          description: User who approved this pattern as known.
+
+  entries:
+    type: array
+    description: One entry per bypass event.
+    items:
+      type: object
+      required: [timestamp, ticket, hook, reason]
+      additionalProperties: false
+      properties:
+
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC.
+
+        ticket:
+          type: string
+          pattern: '^[A-Z][A-Z0-9]*-[0-9]+$'
+          description: Ticket the bypassed commit/push belongs to.
+
+        hook:
+          type: string
+          enum: [pre-commit, pre-push, commit-msg, prepare-commit-msg, post-commit, pre-merge, ci-check]
+          description: Which git hook (or CI check) was bypassed.
+
+        flag:
+          type: string
+          description: The actual flag used (e.g., '--no-verify', 'gh pr merge --skip-checks'). For audit trail.
+
+        reason:
+          type: string
+          minLength: 10
+          description: >
+            Free text reason. MUST be specific enough that a reviewer can
+            understand WHY the bypass was acceptable. Vague reasons like
+            "broken hook" or "in a hurry" trigger the pre-merge gate.
+
+        matched_known_reason:
+          type: string
+          description: >
+            If the reason matched a known pattern from `known_reasons`, this
+            field contains that pattern's `id`. Empty/absent = new reason,
+            requires gate approval.
+
+        pre_existing_evidence:
+          type: string
+          description: >
+            For "pre-existing failure" bypasses: the git command output proving
+            the failure existed before this ticket (e.g., `git show main:file.tsx`).
+            Required for reasons that claim pre-existing state.
+
+        follow_up_ticket:
+          oneOf:
+            - { type: string, enum: [pending, n/a] }
+            - { type: string, pattern: '^[A-Z][A-Z0-9]*-[0-9]+$' }
+          description: >
+            Ticket created to address the root cause that forced the bypass.
+            `pending` = should be created soon. `n/a` = no follow-up needed
+            (pure environmental issue like OneDrive lock). Otherwise the
+            Jira key.
+
+        approval:
+          type: object
+          description: Required for entries that did NOT match a known reason.
+          additionalProperties: false
+          required: [approved, approved_at]
+          properties:
+            approved: { type: boolean }
+            approved_by:
+              type: string
+              description: Username or display name of the approver.
+            approved_at:
+              type: string
+              format: date-time
+            rationale:
+              type: string
+              minLength: 10
+              description: Explicit justification from the approver.
+
+        commit_after_bypass:
+          type: string
+          pattern: '^[0-9a-f]{7,40}$'
+          description: SHA of the commit produced by the bypass (for tracing back from git history).
+
+# Rule: if reason did NOT match a known pattern, approval is required.
+allOf:
+  - properties:
+      entries:
+        items:
+          if:
+            not:
+              required: [matched_known_reason]
+          then:
+            required: [approval]
+            properties:
+              approval:
+                properties:
+                  approved: { const: true }

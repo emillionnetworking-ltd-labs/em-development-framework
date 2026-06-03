@@ -1,0 +1,87 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/commands-catalog.schema.yml
+title: Command Catalog
+description: >
+  Structural contract for forge/commands.catalog.yml (<TICKET-ID>, framework release layer). The
+  single machine-readable source of the framework's command surface (skills /
+  tools / libs) + the deviation taxonomy. COMMANDS_REFERENCE.md and
+  /help-framework are VIEWS derived from this catalog. Consumed programmatically
+  by the MCP server (forge/tools/mcp_server.py) and test_catalog.py.
+
+type: object
+required: [version, commands, taxonomy]
+additionalProperties: false
+
+properties:
+  version:
+    type: string
+    const: "1.0"
+    description: Bumped on breaking shape changes.
+  commands:
+    type: array
+    minItems: 1
+    items:
+      $ref: "#/$defs/command"
+  taxonomy:
+    type: array
+    minItems: 1
+    items:
+      $ref: "#/$defs/category"
+
+$defs:
+  command:
+    type: object
+    required: [name, kind, category, purpose]
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        pattern: '^[a-z][a-z0-9-]*$'
+        description: Command name (skill `/<name>`, tool `<name>.py`, or lib `_<name>.py`).
+      kind:
+        type: string
+        enum: [skill, tool, lib]
+        description: skill = slash command; tool = Python CLI by path; lib = import-only.
+      category:
+        type: string
+        enum: [lifecycle, utility, audit, framework, support]
+        description: Functional grouping for UI modules.
+      purpose:
+        type: string
+        minLength: 5
+      invocation:
+        type: string
+        description: How to invoke (e.g. "/verify", "python3 forge/tools/state-machine.py", "import-only").
+      gated_by:
+        type: string
+        description: Optional — what gates it (e.g. "state-machine" for lifecycle skills).
+      notes:
+        type: string
+      user_invocable:
+        type: boolean
+        description: |
+          True if the operator may invoke this entry directly (slash command or `python3 <path>`).
+          False for import-only libs (per ADR-006 + COMMANDS_REFERENCE.md line 23-28) and for
+          the 6 lifecycle skills which are engine-driven phase playbooks (CLAUDE.md operating
+          contract + COMMANDS_REFERENCE.md line 57). Enforced by test_catalog.py (<TICKET-ID>
+          framework release layer).
+  category:
+    type: object
+    required: [category, criteria, blocks_merge, creates_ticket]
+    additionalProperties: false
+    properties:
+      category:
+        type: string
+        enum: [Accepted-Trivial, Accepted-Quality, Accepted-Risk, Deferred, Pre-existing, Scope-Gap]
+        description: Deviation category (mirrors DeviationCategory in _lifecycle_state.py).
+      criteria:
+        type: string
+        minLength: 5
+      blocks_merge:
+        type: boolean
+      creates_ticket:
+        type: boolean
+      sprint_target:
+        type: string
+        enum: [current, backlog, none]
+        description: Where an auto-created ticket lands (if any).

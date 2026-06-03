@@ -1,0 +1,36 @@
+# Workflow Standards (placeholder)
+
+This file declares the workflow + change-control standards for THIS product. The framework's agent personas read this file via `<custom_standards.workflow>` symbolic reference declared in `forge.config.yml`.
+
+Replace the placeholder sections below with your product's actual workflow + AUTH change-control discipline.
+
+## 1-14. Standard workflow sections
+
+(branch naming, commit conventions, PR templates, CI gates, etc.)
+
+## 15. AUTH Change-Control (MANDATORY)
+
+The AUTH domain is the most blast-prone surface in any product. This section defines the
+process gates around every change touching authentication / authorization / token /
+session / MFA / OAuth code paths.
+
+### 15.1 Domain definition
+
+A change is "in AUTH" if it modifies any of the following paths:
+
+| Path | Scope |
+|------|-------|
+| (list your product's auth paths here) |
+
+### 15.2 What is NOT AUTH
+
+(list domains that interact with AUTH but are governed separately)
+
+### 15.3 Mandatory rules
+
+1. **No AUTH change without an explicit ticket** with key in branch/commit/PR title.
+2. **No AUTH change merges without owner approval** (CODEOWNERS-enforced).
+3. **Every AUTH PR MUST include three artifacts**: threat model + test plan + rollback playbook.
+
+(the framework's `backend-developer` persona enforces this via its Hard Security Rule —
+do not weaken the §15.3 rules unless you have explicit risk approval)

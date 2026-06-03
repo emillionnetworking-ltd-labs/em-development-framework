@@ -1,0 +1,72 @@
+---
+version: 1.0.2
+status: active
+category: spec
+description: "Conventions for Satellite App sprints (SAT* projects) — naming, branch pattern, state-file scopes."
+last_changed: 2026-06-02
+alwaysApply: false
+license: MIT
+copyright: "Copyright (c) 2026 EMillion Networking LTD"
+---
+
+> **Modular spec extracted from `workflow-standards.mdc` per ADR-012 (framework release layer <TICKET-ID>).** Read on demand when the activation trigger fires (see `workflow-standards.mdc §0 Specs Index`). Originally numbered §X in the Core file; section numbers below restart at §1 within this modular file.
+
+## 1. Satellite Sprint Convention (MANDATORY for SAT projects)
+
+Every satellite project (Jira key prefix `SAT{NN}`) follows a fixed minimum
+sprint structure. Pattern established with SAT01 (Cristian García,
+2026-04-30 → 2026-05-01), validated end-to-end, formalised here as the baseline
+for SAT02 onwards.
+
+### Standard sprints
+
+| Sprint | Convention name (≤ 30 chars) | Scope | Mandatory? |
+|---|---|---|---|
+| **S1** | `SAT{NN} S1 - Setup & Landing` | Scaffold Next.js, theming + UI Core copy, build all marketing pages, IntroLoader splash, ship to Vercel default URL. **No** security headers, **no** SEO files, **no** observability. | Yes — every satellite |
+| **S2** | `SAT{NN} S2 - Prod Hardening` | 6 security headers, robots.ts, sitemap.ts, per-page metadata enrichment, env-driven `metadataBase`, Vercel Speed Insights + Analytics. CSP deferred. | Yes — before client review |
+| **S3** | `SAT{NN} S3 - Launch` | Custom domain wiring, www→apex redirect, SSL verification, `NEXT_PUBLIC_SITE_URL` env-var swap. Optional CSP nonce-strategy implementation. | When client confirms domain |
+| **S4+** | Per-client backlog | Contact form backend, CMS wiring, A/B tests, additional content drops. | As needed |
+
+> **Sprint name max length is 30 characters in Jira.** Stick to the convention
+> verbatim — name drift makes search and reporting harder.
+
+### Why two sprints (S1 + S2) and not one
+
+Mixing setup and hardening into a single sprint:
+- Hides the verify gate (one verdict has to cover both "renders correctly" AND "production-grade")
+- Makes the implementation plan unwieldy (~25 steps instead of ~10 + ~7)
+- Loses the natural breakpoint where the satellite is shareable internally for review (after S1) but not yet ready for external eyes (until S2)
+
+Two sprints make these gates explicit and let parallel content work happen in S2.
+
+### Templates and runbook
+
+When planning S1 or S2 for a new satellite, **clone the template — do not
+re-derive the plan from scratch**. Templates capture every step learned from
+prior satellites:
+
+- `templates/satellite-S1-setup-plan.md`
+- `templates/satellite-S2-hardening-plan.md`
+
+Operational deployment procedure (Vercel API token setup, GitHub App install
+prerequisites, first-deploy gotchas, custom domain wiring): see
+`satellite-deployment-runbook.md`.
+
+### S1/S2 ticket lifecycle
+
+The satellite tickets follow the standard 6-phase lifecycle from Section 3
+(`/enrich-us` → `/plan` → `/develop` → `/verify` → `/commit` → `/update-docs`)
+without exception. The sprint convention does NOT shortcut the lifecycle — each
+ticket still gets its own plan, verify report, implementation record, and Jira
+transition.
+
+### Naming derivatives
+
+| Artifact | Convention | Example (SAT01-1) |
+|---|---|---|
+| Branch | `feature/SAT{NN}-{X}-frontend` | `feature/SAT01-1-frontend` |
+| Plan | `.lifecycle/artifacts/sat-{client}/plans/SAT{NN} S{N}/SAT{NN}-{X}_frontend.md` | `.lifecycle/artifacts/sat-cristian-garcia/plans/SAT01 S1/SAT01-1_frontend.md` |
+| Verify | same folder, `_verify.md` suffix | `SAT01-1_verify.md` |
+| Record | `.lifecycle/artifacts/sat-{client}/records/SAT{NN} S{N}/SAT{NN}-{X}_frontend.md` | `SAT01-1_frontend.md` (under `records/SAT01 S1/`) |
+| Commit subject | `SAT{NN}-{X}: <imperative summary>` | `SAT01-1: Build sat-cristian-garcia satellite (initial implementation)` |
+

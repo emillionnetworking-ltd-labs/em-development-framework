@@ -1,0 +1,17 @@
+# em-development-framework — runtime Python deps for ai-specs/tools/.
+# Pin to compat ranges; tighten if version skew causes issues.
+# Generated/maintained by <TICKET-ID> (Phase 1 substrate).
+#
+# Deps verified at /enrich-us <TICKET-ID> (live-grep across 52 tools):
+#   pyyaml: used in 32 tools (import yaml)
+#   jsonschema: used in 2 tools (validate-artifact.py + policy-validator.py)
+
+pyyaml>=6.0,<7.0
+jsonschema>=4.10,<5.0
+# <TICKET-ID>: typed AuditState for the meta-audit tooling (ai-specs/tools/meta-audit/).
+# Deliberate, ADR-009-documented departure; forward-consistent with the LangGraph
+# orchestrator (pydantic-based). See specs/adrs/adr-009-pydantic-for-meta-audit.md.
+pydantic>=2,<3
+# <TICKET-ID> framework release layer (Pilar 2.2 FINAL): MCP server (FastMCP reference implementation).
+# Strategy v2 must_fix #8: anthropic mcp-sdk only, NO custom MCP from scratch.
+mcp>=1.27,<2.0

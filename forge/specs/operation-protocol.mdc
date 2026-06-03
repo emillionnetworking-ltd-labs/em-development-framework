@@ -1,0 +1,104 @@
+---
+version: 1.0.2
+status: active
+category: spec
+description: Operation protocol — exit codes + WorkRequest schema + orient-loop-gate sequence for the LangGraph engine that drives /lifecycle and /strategy.
+last_changed: 2026-06-02
+alwaysApply: false
+license: MIT
+copyright: "Copyright (c) 2026 EMillion Networking LTD"
+---
+
+# Operation Protocol — Autonomous Framework Operation (framework release layer)
+
+How an agent (Claude Code) operates the framework through its console CLI, driving the
+compiled LangGraph brains (lifecycle + strategy) and honoring the operator's governance.
+This is the source of truth for the "continuemos" loop. Code lives in `framework/cli/`.
+
+## When this applies
+
+The operator asks to advance work autonomously — "continuemos", "sigue la fase X",
+"corre el lifecycle de SCRUM-NNN", "arranca el estratega sobre <target>". Drive the CLI
+loop; do not hand-run the prose skills step by step (the skills are now the work the CLI
+hands back at each interrupt, not a separate choreography).
+
+## The loop
+
+### 1. Orient
+
+```
+python -m framework.cli.run --status --mode lifecycle --ticket <TICKET> --module <MODULE>
+```
+
+Reports the open ticket + its phase. (For the strategist there is no durable ticket; start
+a session with `--mode strategy --target "<problem>"`.)
+
+### 2. Advance / resume, reading the exit code
+
+```
+python -m framework.cli.run --mode lifecycle --ticket <T> --module <M> --advance
+python -m framework.cli.run --mode lifecycle --ticket <T> --module <M> --resume --feed <fields.json>
+python -m framework.cli.run --mode strategy  --target "<problem>" --advance
+python -m framework.cli.run --mode strategy  --target "<problem>" --resume --decision <approve|refine|abort>
+```
+
+Each invocation runs one hop and exits with a code (defined in `framework.cli._protocol`):
+
+| exit | meaning | what the agent does |
+|------|---------|---------------------|
+| `0`  | done — the graph reached END | report completion |
+| `10` | a `WorkRequest` (cognitive work) | do the work with native tools, then `--resume --feed` |
+| `20` | a human / interrupt-before stop (e.g. `human_review`) | surface to the operator; resume with `--decision` after their call |
+| `1`  | error | read the stderr `{"error": …}` and fix the cause |
+
+At a non-terminal stop the CLI prints a `WorkRequest` JSON: `node` (the phase/op), `needs`
+(the fields/artifacts to feed back), `context` (a state slice), and `gate` (see below).
+
+### 3. Fulfilling a `WorkRequest` (exit 10)
+
+The `node` says which phase/op; `needs` says what to return. Do the real work with native
+tools (Read/Grep/Edit/Bash/WebSearch), write the result to a small JSON of the `needs`
+fields, then `--resume --feed that.json`. Lifecycle phases produce advance-fields
+(e.g. `plan` → `{"path":…, "schema_validated":true}`); strategy ops produce findings /
+typed `Proposal`/`Critique` / the report.
+
+#### Playbook-read rule (lifecycle — MANDATORY, <TICKET-ID>)
+
+For a **lifecycle** `WorkRequest`, the `node` is a phase (`enrich-us`, `plan`, `develop`,
+`verify`, `commit`, `update-docs`). Before doing the work, **READ the phase's playbook
+`forge/.playbooks/<node>.md`** and execute ITS instructions for this phase — that file is the
+source of truth for *how* to do the phase (the 16-section plan template, the verify gate, the
+deviation rules, etc.). Do NOT improvise a phase from the thin `WorkRequest` alone.
+
+These 6 step-skills are `user-invocable: false` — hidden from the operator's `/` menu (the
+operator drives the lifecycle via `/lifecycle`), but retained as the agent's playbooks, read
+here at each interrupt. The orchestrator calls the `ClaudeCodeWorkLayer` (which interrupts to
+you); it does not execute the skill markdown — you do, by reading it at the interrupt.
+
+## The gates — mechanized hard-limits (MANDATORY)
+
+A `WorkRequest` may carry a `gate` naming a `HARD_LIMITS` action. **A gate means: do the
+non-gated prep, but STOP and obtain the operator's explicit authorization before performing
+the gated action — never do it autonomously.** The registry (`framework.cli._protocol.HARD_LIMITS`):
+
+| gate | action | how to clear it |
+|------|--------|-----------------|
+| `push` | push local main → origin (e.g. the `commit` phase) | the operator's EXACT push phrase ("autorizo el push directo de main a origin") — a bare "si" is not enough |
+| `jira-post` | a Jira write — create/transition (e.g. the `enrich-us` phase) | explicit per-action operator approval |
+| `auth-15` | a change in the AUTH §15 domain | NOT-§15 change-control: ticket-first, split cross-domain PRs, never `--no-verify` |
+| `scope-gap` | an unjustified plan gap (the lifecycle routes it back to develop) | implement the gap or the operator reclassifies it |
+| `strategic-choice` | a strategic option the operator must pick | present the options and wait |
+
+`PHASE_GATES` maps lifecycle phases to their gate (`enrich-us`→`jira-post`, `commit`→`push`).
+The gate is the codification of the operator's durable feedback — it makes a fresh agent
+(with no chat history) pause exactly where the operator requires.
+
+## Boundaries
+
+- **The agent is the muscle (Model B).** Cognitive work is done by Claude Code at the exit-10
+  pause, not by a second LLM inside the node. The graph is the deterministic conductor.
+- **Durability.** The lifecycle checkpoints to the canonical `state.yml`; the strategist to
+  `.strategy-sessions/`. The loop is resumable across separate CLI invocations.
+- **No autonomous hard-limits.** Push, Jira writes, AUTH §15, scope-gaps, and strategic
+  choices always wait for the operator. Autonomy speeds the work between gates; it never
+  bypasses them.

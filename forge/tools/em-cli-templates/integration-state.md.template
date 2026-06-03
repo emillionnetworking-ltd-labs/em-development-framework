@@ -1,0 +1,27 @@
+# Integration State (placeholder)
+
+> **Living document.** Updated after every implementation ticket. Tracks module dependencies, guard chains, service injections, and other integration-level concerns that influence planning decisions.
+
+Replace this placeholder with your product's actual integration state. The framework's agent personas read this file via `<integration_state_path>` symbolic reference declared in `forge.config.yml`.
+
+## Module registry
+
+| Module | Type | Owner | Public exports |
+|--------|------|-------|----------------|
+| (example) `auth` | core | `@org/team` | `AuthModule`, `JwtGuard`, `RolesGuard` |
+
+## Guard dependency map
+
+| Guard | Constructor deps | Source module |
+|-------|------------------|---------------|
+| (example) `RolesGuard` | `Reflector`, `AuditService` | `@org/auth` |
+
+## Service dependency chains
+
+(document cross-module service injections here)
+
+## Changelog
+
+| Date | Ticket | Summary |
+|------|--------|---------|
+| (auto-populated by `/update-docs` after each Wave) |

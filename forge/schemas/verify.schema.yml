@@ -1,0 +1,238 @@
+# forge Verify artifact schema
+#
+# Validates `.lifecycle/artifacts/<module>/plans/<sprint-or-wave>/SCRUM-XX_verify.md`.
+# Section list derived from `forge/.playbooks/verify.md`.
+#
+# Critical: /commit (FW-004) MUST refuse if this schema fails. A verify report
+# with a verdict but missing "Plan Compliance" or "Deviations" sections is exactly
+# the failure mode the audit 2026-05-13 flagged (<TICKET-ID> evidence).
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/verify.schema.yml
+title: ai-specs Verify Artifact
+description: >
+  Pre-merge quality gate report produced by /verify between /develop and /commit.
+  Verdict enum + required sections enforced by this schema. Audit-fix tickets
+  have additional required sections (Audit Finding Resolution, Recurrence
+  Prevention).
+
+type: object
+required: [frontmatter, headings]
+additionalProperties: true
+
+properties:
+
+  # ----- Frontmatter -----
+  frontmatter:
+    type: object
+    required: [schema, ticket, sprint, scope, module, date, branch, verdict, is_audit_fix]
+    additionalProperties: false
+    properties:
+      schema:
+        const: ai-specs/schemas/verify.schema.yml
+      ticket:
+        type: string
+        pattern: '^[A-Z][A-Z0-9]*-[0-9]+$'
+      sprint:
+        type: string
+        pattern: '^(Sprint [0-9]+|SAT[0-9]+ S[0-9]+|backlog|Wave [0-9]+ - .+)$'
+      scope:
+        type: string
+        enum: [backend, frontend, fullstack]
+      module:
+        type: string
+        pattern: '^[a-z][a-z0-9-]*$'
+      date:
+        type: string
+        format: date
+      branch:
+        type: string
+        pattern: '^(feature|fix)/[A-Z][A-Z0-9]*-[0-9]+(-[a-z0-9-]+)?$'
+      plan_path:
+        type: string
+        description: Relative path from repo root to the plan being verified.
+      verdict:
+        type: string
+        enum: [PASS, PASS-WITH-DEBT, BLOCKED-RISK, BLOCKED-GAP, BLOCKED-BUILD]
+      is_audit_fix:
+        type: boolean
+        description: >
+          True if the ticket originates from an audit finding (Audit Fix prefix,
+          parent is audit report ticket, or plan references an audit check ID).
+          When true, Audit Finding Resolution and Recurrence Prevention sections
+          become required.
+      deviation_counts:
+        type: object
+        description: Summary; detailed list inside the document.
+        additionalProperties: false
+        properties:
+          accepted_trivial: { type: integer, minimum: 0 }
+          accepted_quality: { type: integer, minimum: 0 }
+          accepted_risk:    { type: integer, minimum: 0 }
+          deferred:         { type: integer, minimum: 0 }
+          pre_existing:     { type: integer, minimum: 0 }
+          scope_gap:        { type: integer, minimum: 0 }
+      framework_version:
+        type: string
+        pattern: '^\d+\.\d+\.\d+$'
+        description: >
+          SemVer 2.0.0 of em-development-framework at the time this verify
+          report was written. Read from the VERSION file at framework root.
+          Optional for backward compatibility; introduced by <TICKET-ID>.
+          Distinct semantic from audit-phase-report.schema.yml's
+          framework_version field (which carries audit-standards version).
+
+  # ----- Headings -----
+  headings:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      required: [level, text]
+      additionalProperties: true
+      properties:
+        level: { type: integer, minimum: 1, maximum: 6 }
+        text: { type: string, minLength: 1 }
+
+# ----- Reusable section-match definitions -----
+$defs:
+
+  h1_present:
+    type: object
+    description: H1 must reference the ticket.
+    properties:
+      level: { const: 1 }
+      text: { pattern: '^Verification Report: [A-Z][A-Z0-9]*-[0-9]+' }
+    required: [level, text]
+
+  h2_plan_compliance:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Plan Compliance' }
+    required: [level, text]
+
+  h2_deviations:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Deviations' }
+    required: [level, text]
+
+  h2_code_quality_checks:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Code Quality Checks' }
+    required: [level, text]
+
+  h2_regression_verification:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Regression Verification' }
+    required: [level, text]
+
+  h2_audit_finding_resolution:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Audit Finding Resolution' }
+    required: [level, text]
+
+  h2_recurrence_prevention:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Recurrence Prevention' }
+    required: [level, text]
+
+  h2_accepted_risk_items:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Accepted-Risk Items' }
+    required: [level, text]
+
+  h2_tech_debt_tickets:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^Tech Debt Tickets Created' }
+    required: [level, text]
+
+# ----- Rules -----
+allOf:
+
+  # H1 always required.
+  - properties:
+      headings:
+        contains: { $ref: '#/$defs/h1_present' }
+
+  # Core 4 sections required for ALL verify reports.
+  - properties:
+      headings:
+        allOf:
+          - contains: { $ref: '#/$defs/h2_plan_compliance' }
+          - contains: { $ref: '#/$defs/h2_deviations' }
+          - contains: { $ref: '#/$defs/h2_code_quality_checks' }
+          - contains: { $ref: '#/$defs/h2_regression_verification' }
+
+  # Audit-fix tickets: 2 extra mandatory sections (audit-standards.mdc §6.3.2).
+  - if:
+      properties:
+        frontmatter:
+          properties: { is_audit_fix: { const: true } }
+    then:
+      properties:
+        headings:
+          allOf:
+            - contains: { $ref: '#/$defs/h2_audit_finding_resolution' }
+            - contains: { $ref: '#/$defs/h2_recurrence_prevention' }
+
+  # If any Accepted-Risk deviation exists, the formal risk section is required.
+  - if:
+      properties:
+        frontmatter:
+          properties:
+            deviation_counts:
+              properties:
+                accepted_risk: { minimum: 1 }
+              required: [accepted_risk]
+          required: [deviation_counts]
+    then:
+      properties:
+        headings:
+          contains: { $ref: '#/$defs/h2_accepted_risk_items' }
+
+  # If any Accepted-Quality deviation, tech-debt tickets section is required.
+  - if:
+      properties:
+        frontmatter:
+          properties:
+            deviation_counts:
+              properties:
+                accepted_quality: { minimum: 1 }
+              required: [accepted_quality]
+          required: [deviation_counts]
+    then:
+      properties:
+        headings:
+          contains: { $ref: '#/$defs/h2_tech_debt_tickets' }
+
+  # BLOCKED verdicts: the report must explicitly list blockers.
+  # We don't add a new heading requirement, but we enforce that the verdict is
+  # consistent with the deviation counts: PASS verdicts cannot coexist with
+  # accepted_risk or scope_gap > 0.
+  - if:
+      properties:
+        frontmatter:
+          properties: { verdict: { enum: [PASS, PASS-WITH-DEBT] } }
+    then:
+      properties:
+        frontmatter:
+          properties:
+            deviation_counts:
+              properties:
+                accepted_risk: { maximum: 0 }
+                scope_gap:     { maximum: 0 }

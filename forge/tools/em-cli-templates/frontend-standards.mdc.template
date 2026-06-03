@@ -1,0 +1,29 @@
+# Frontend Standards (placeholder)
+
+This file declares the frontend coding standards for THIS product. The framework's `frontend-developer` agent persona reads this file via `<custom_standards.frontend>` symbolic reference declared in `forge.config.yml`.
+
+Replace the placeholder content below with your product's actual frontend standards.
+
+## Component architecture
+
+(atomic design / feature-based / domain-driven structure, naming, file layout)
+
+## State management
+
+(Context / Redux / Zustand / Pinia / Signals / etc.)
+
+## Styling
+
+(Tailwind / CSS Modules / Styled Components / CSS-in-JS / design tokens)
+
+## API integration
+
+(client singleton patterns, error mapping, retry/loading states)
+
+## Accessibility
+
+(WCAG target level, ARIA patterns, keyboard navigation, screen reader testing)
+
+## Testing
+
+(unit / component / E2E approach, coverage targets)

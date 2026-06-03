@@ -1,0 +1,27 @@
+# Backend Standards (placeholder)
+
+This file declares the backend coding standards for THIS product. The framework's `backend-developer` agent persona reads this file via `<custom_standards.backend>` symbolic reference declared in `forge.config.yml`.
+
+Replace the placeholder content below with your product's actual backend standards:
+architecture patterns, dependency management, testing conventions, error handling discipline,
+security baselines, observability hooks, etc.
+
+## Architecture
+
+(your modular / layered / hexagonal / event-driven choice and conventions go here)
+
+## Coding standards
+
+(language idioms, naming, file layout, dependency injection conventions)
+
+## Testing
+
+(unit / integration / E2E approach, coverage targets, fixtures)
+
+## Security
+
+(input validation, secret management, AUTH integration, authorization patterns)
+
+## Error handling
+
+(exception hierarchy, retry policy, observability)

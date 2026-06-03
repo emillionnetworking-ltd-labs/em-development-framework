@@ -1,0 +1,132 @@
+# Deviation taxonomy SSoT schema (<TICKET-ID>, framework release layer).
+#
+# Governs `forge/.deviation-taxonomy.yml` — the single source of truth for the
+# 6-category deviation taxonomy + 5-question decision tree. Replaces the
+# duplicated representation that previously lived in:
+#   - workflow-standards.mdc §8 (prose narrative)
+#   - _classify_deviation.py (hardcoded CATEGORIES list + QUESTIONS tuples)
+#
+# The Python lib _classify_deviation.py loads the data file at import-time and
+# rebuilds CATEGORIES + QUESTIONS from it. Prose §8 is rewritten as a thin
+# reference. CI test test_deviation_taxonomy_consistency.py asserts the
+# triplet (schema ↔ data ↔ prose) stays in sync.
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/deviation-taxonomy.schema.yml
+title: Deviation Taxonomy SSoT
+description: >
+  Single source of truth for the 6-category deviation taxonomy + 5-question
+  decision tree used by /verify, /classify-deviation, and workflow-standards
+  §8. The lib `_classify_deviation.py` loads this file at import time.
+
+type: object
+required: [categories, questions, anti_patterns, audit_mapping]
+additionalProperties: false
+
+properties:
+
+  categories:
+    type: array
+    minItems: 6
+    maxItems: 6
+    description: The 6 canonical categories. Order matters for display only.
+    items:
+      type: object
+      required: [name, criteria, blocks_merge, creates_ticket, sprint_target, requires_user_approval]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          enum:
+            - Accepted-Trivial
+            - Accepted-Quality
+            - Accepted-Risk
+            - Deferred
+            - Pre-existing
+            - Scope-Gap
+        criteria:
+          type: string
+          minLength: 20
+          description: One-line operator-readable criteria.
+        blocks_merge:
+          type: boolean
+          description: True if /commit must refuse on this category.
+        creates_ticket:
+          type: boolean
+          description: True if a follow-up Jira ticket is auto-created.
+        sprint_target:
+          type: string
+          enum: [current, backlog, none]
+          description: Where the auto-created ticket lands (or `none` if no ticket).
+        requires_user_approval:
+          type: boolean
+          description: True if /verify must pause and surface to the operator before proceeding.
+
+  questions:
+    type: array
+    minItems: 5
+    maxItems: 5
+    description: >
+      The decision tree, evaluated in order. First YES wins. If all answers
+      are NO, the deviation falls through to Scope-Gap (blocks merge).
+    items:
+      type: object
+      required: [key, prompt, category]
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+          pattern: '^[a-z][a-z_]*$'
+          description: Stable identifier; surfaces in classify-deviation --json output.
+        prompt:
+          type: string
+          minLength: 20
+          description: The operator-facing question text.
+        category:
+          type: string
+          enum:
+            - Accepted-Trivial
+            - Accepted-Quality
+            - Accepted-Risk
+            - Deferred
+            - Pre-existing
+            - Scope-Gap
+          description: The category assigned if this question answers YES.
+
+  anti_patterns:
+    type: array
+    minItems: 1
+    description: Common misclassification patterns to refuse.
+    items:
+      type: string
+      minLength: 20
+
+  audit_mapping:
+    type: array
+    minItems: 6
+    maxItems: 6
+    description: >
+      Maps the 6 /verify-time categories to the coarser 3-class audit taxonomy
+      (Justified / Process / Unjustified) used by audit-standards.mdc Phase 7.
+    items:
+      type: object
+      required: [verify_category, audit_class, why]
+      additionalProperties: false
+      properties:
+        verify_category:
+          type: string
+          enum:
+            - Accepted-Trivial
+            - Accepted-Quality
+            - Accepted-Risk
+            - Deferred
+            - Pre-existing
+            - Scope-Gap
+        audit_class:
+          type: string
+          description: Justified | Process | Unjustified | conditional (e.g. "Justified iff approved").
+          minLength: 5
+        why:
+          type: string
+          minLength: 10
+          description: One-line rationale for the roll-up.

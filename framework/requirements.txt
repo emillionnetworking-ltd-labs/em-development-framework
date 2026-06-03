@@ -1,0 +1,5 @@
+# framework/ (the baton) — isolated deps. Same langgraph the orchestrator uses.
+# Kept separate from ai-specs (specs, no app deps) and installed independently.
+# Pinned to the VALIDATED runtime (<TICKET-ID>): langgraph 1.2.2. langgraph-checkpoint
+# comes transitively via orchestrator/requirements.txt (framework imports orchestrator).
+langgraph>=1,<2

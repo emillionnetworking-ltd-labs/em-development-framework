@@ -1,0 +1,72 @@
+# Procedural checks-as-config schema (<TICKET-ID>, framework release layer).
+#
+# Governs `forge/.checks-registry.yml` — the SSoT for the procedural quality
+# checks executed by `verify-checks.py` at /verify time. Replaces the
+# semi-procedural pseudocode that previously lived in verify.md Step 4 (4a-4e).
+#
+# The runner (_verify_checks.py) loads the registry, resolves each `executor`
+# key to a Python function, runs the check, and emits a ChecksReport.
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/checks.schema.yml
+title: Procedural Checks Registry
+description: >
+  Single source of truth for the procedural quality checks executed by
+  /verify Step 4. Each check declares ID, name, severity (block|warn),
+  applicable scopes, and the executor function key resolved by the runner.
+
+type: object
+required: [checks]
+additionalProperties: false
+
+properties:
+  checks:
+    type: array
+    minItems: 1
+    description: The set of procedural checks the runner orchestrates.
+    items:
+      type: object
+      required: [id, name, description, severity, applies_to, executor]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^c[0-9]{2}_[a-z][a-z0-9_]*$'
+          description: Stable identifier (c01_*, c02_*, etc.) — used as the row key in ChecksReport.
+        name:
+          type: string
+          minLength: 5
+          description: Short human-readable label rendered in the ChecksReport table.
+        description:
+          type: string
+          minLength: 20
+          description: One-line operator-readable description of what the check verifies.
+        severity:
+          type: string
+          enum: [block, warn]
+          description: >
+            block = a failed (or skipped-infra) check turns the verify verdict to
+            BLOCKED-GAP. warn = surfaces as a deviation candidate without blocking.
+        applies_to:
+          type: array
+          minItems: 1
+          description: Scope filter; the check is executed only if /verify scope is in this list.
+          items:
+            type: string
+            enum: [backend, frontend, framework, fullstack, all]
+        executor:
+          type: string
+          pattern: '^[a-z][a-z_]*$'
+          description: >
+            Stable function key resolved by _verify_checks.py to a Python predicate.
+            Every executor declared here MUST exist in the EXECUTORS dict; the CI
+            consistency test enforces this.
+        config:
+          type: object
+          description: Optional per-check parameters (paths, timeouts, patterns, etc.).
+          properties:
+            timeout_seconds:
+              type: integer
+              minimum: 1
+              description: Subprocess timeout in seconds (consumed by c04, c05).
+          additionalProperties: false

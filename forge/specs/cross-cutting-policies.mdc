@@ -1,0 +1,259 @@
+---
+version: 1.0.2
+status: active
+category: spec
+description: "Cross-cutting framework policies: groundedness validation (§1), multi-agent coordination via state-file locking (§2), Jira lifecycle Done-not-Closed policy (§3), pending-improvements registry rules (§4)."
+last_changed: 2026-06-02
+alwaysApply: false
+license: MIT
+copyright: "Copyright (c) 2026 EMillion Networking LTD"
+---
+
+> **Modular spec extracted from `workflow-standards.mdc` per ADR-012 (framework release layer <TICKET-ID>).** Read on demand when the activation trigger fires (see `workflow-standards.mdc §0 Specs Index`). Originally numbered §X in the Core file; section numbers below restart at §1 within this modular file.
+
+## 1. Groundedness Validation
+
+Added by <TICKET-ID> (Phase 3.5). Closes audit gap **G3 (CRITICAL)** from `.lifecycle/artifacts/framework/audits/2026-05-16-full-audit/09-ai-behavior-validation.md` — the only CRITICAL gap left UNASSIGNED post-Phase-3. Groundedness validation is a content-correctness layer complementing the structural schema validation already enforced via `validate-artifact.py`. Schema validates *"is this artifact well-shaped"*; groundedness validates *"do its claimed references exist in reality"*.
+
+### 1.1 Rule catalog
+
+| Rule-id | Check | Authoritative source |
+|---|---|---|
+| **GRD-001** | PR number exists | `gh pr view <N> --repo <repo>` with persistent cache |
+| **GRD-002a** | Commit SHA exists | `git cat-file -e <sha>` in framework repo |
+| **GRD-002b** | Commit SHA prefix is unambiguous | `git cat-file -e <sha>` — stderr "ambiguous" channel |
+| **GRD-003** | `file:line` reference resolves | filesystem check: file exists + line ≤ total lines |
+
+All four rules emit `Violation(rule_id, severity=WARN, file, line, ref, message)`. Severity is uniformly WARN this iteration (§1.3).
+
+### 1.2 Invocation
+
+Opt-in via `--strict-groundedness` on `validate-artifact.py`. Default OFF — backward compatibility preserved for existing CI gates, `state-machine.py` subprocess calls, and ad-hoc operator invocations.
+
+Ad-hoc usage:
+
+```bash
+python3 forge/tools/validate-artifact.py --strict-groundedness \
+  .lifecycle/artifacts/framework/records/backlog/SCRUM-XXX_backend.md
+```
+
+CI usage: Jobs 2 (changed artifacts) and 3 (full corpus) carry a dedicated warn-only step that runs the validator with `--strict-groundedness --groundedness-offline`.
+
+### 1.3 Severity policy
+
+Severity policy has two components: §1.3.1 documents the current state of validation (immutable for this iteration); §1.3.2 documents the escalation policy + the mensurable precondition for flipping warn → block in a future iteration. The split was introduced in <TICKET-ID> after the 2026-05-17 re-audit Pass 3 identified that the original single-paragraph §1.3 conflated state with policy and used a precondition ("PR canaries") that did not apply to the universe that actually produces groundedness violations (records + plans direct-to-main).
+
+#### 1.3.1 Current state
+
+WARN-only this iteration. Groundedness violations do **not** alter the verdict — the schema verdict remains authoritative; violations are reported as a sidecar channel under `result['groundedness']`. CI Jobs 2 (changed artifacts) + 3 (full corpus) carry their respective groundedness steps with `continue-on-error: true`. No skill, hook, or tool blocks on groundedness output today.
+
+The corpus baseline at <TICKET-ID> merge time is **19 violations across 9 of 17 framework records** — frozen in `forge/.groundedness-baseline.yml` as the operational floor.
+
+#### 1.3.2 Escalation policy
+
+The warn → block flip is a deliberate, separate decision. The mechanical change is to remove `continue-on-error: true` from the two new CI groundedness steps and update §1.3.1 to declare the new state.
+
+**Precondition for eligibility (mensurable)**: zero novel groundedness violations introduced via `/update-docs` Part 6 (records, plans, verify reports committed direct-to-main) for one calendar week. The corpus baseline test `test_groundedness_baseline.py` (<TICKET-ID>) makes this precondition observable: it asserts `current_violations - snapshot_violations == ∅` and fails CI Job 5 if any violation appears that is not in the snapshot.
+
+Why records+plans direct-to-main, not PRs: framework records ship via `/update-docs` Part 6 to `main` directly (no feature branch, no PR). PRs only run for code changes (lifecycle code, tools, standards). The legacy "PR canary precondition" only sampled the code-change universe; records + plans (the dominant source of groundedness violations) bypassed it entirely. The corrected precondition samples the right universe.
+
+**Activation procedure** (when precondition is satisfied):
+
+1. Verify the 7-day window via `git log` on `.lifecycle/artifacts/framework/records/`, `plans/` (no new commits, OR all new commits' validate-artifact runs show zero novel violations).
+2. Operator runs `python3 forge/tools/groundedness-snapshot.py --diff` and confirms `+ 0 new`.
+3. Operator opens a ticket implementing the flip: edit `.github/workflows/ci.yml` (remove `continue-on-error: true` from groundedness steps in Job 2 + Job 3) + edit §1.3.1 here to declare the new state + bump the relevant skills/versions.
+4. Post-merge: the next PR with a hallucinated PR/SHA/file:line ref will BLOCK rather than WARN.
+
+Alternative escalation pathway — **ban-net-new** — keeps the historical 19 baseline as tolerated (via auto-generated allowlist) and blocks only NEW violations vs the snapshot. Captures the same preventive value as full block without requiring the operator to retroactively fix the 19 baseline violations. Tracked as deferred in `2026-05-17-re-audit/follow-up-analysis.md`.
+
+### 1.4 Allowlist
+
+`forge/.groundedness-allowlist.yml` (committed to repo, shape-checked at load time):
+
+```yaml
+pr_refs: []          # e.g. ["#9999"] when an audit doc references a deliberately fake PR
+sha_refs: []         # SHA literals to skip
+file_line_refs: []   # "<path>:<line>" literals to skip
+```
+
+Use cases:
+- Audit / standards docs that quote prose examples with intentionally-fake refs.
+- Historical records that reference em-ecosystem PRs/SHAs/files which are out-of-scope for cross-repo verification (per Phase 3.5 plan §1 decisions).
+- Test fixtures embedded in records.
+
+Operating rule: every allowlist entry should have a one-line YAML comment explaining *why* the reference is skipped. If a reference can be made to resolve (rewriting the path or using a longer SHA prefix), prefer the rewrite over the allowlist.
+
+### 1.5 Caching
+
+`gh pr view` calls are persisted in `${XDG_CACHE_HOME:-~/.cache}/em-development-framework/gh-pr-cache.json`. Cache shape:
+
+```json
+{ "<repo>": { "<pr_number>": { "checked_at_epoch": <unix-ts>, "exists": <bool> } } }
+```
+
+TTL: 24h on positive lookups; 1h on negative lookups (so a typo'd PR does not poison the cache for a full day). Cache writes are atomic. Cache-write failures are non-fatal.
+
+Offline mode (`--groundedness-offline`): when the cache lacks an entry for a referenced PR, the validator **skips the check without emitting a violation** — refusing to flag what it cannot verify. This is the mode used by CI (ephemeral runners, no warm cache).
+
+### 1.6 Cross-references
+
+- **ADR-004** (schema-driven validation) — §18 is the content-correctness complement to ADR-004's structural backbone.
+- **§16 Framework Versioning** (<TICKET-ID>) — sibling section; same SemVer policy applies to `validate-artifact.py` itself: `--strict-groundedness` is Y minor (additive opt-in).
+- **§17 Skill Versioning** (<TICKET-ID>) — sibling section; same versioning discipline applied to a different artifact type (skills vs framework code).
+- **Audit chapter 09 §G3 + Recomendaciones §4** (`.lifecycle/archive/<workspace.product_name>-fossils/audits/09-ai-behavior-validation.md (historical)-119`) — original requirement; closed by <TICKET-ID>.
+
+## 2. Multi-agent Coordination (state.yml locking)
+
+Concurrent agents can run the lifecycle in parallel. To make corruption-by-concurrency impossible on the shared `state.yml`, `state-machine.py` serializes read-modify-write access with an `fcntl` lock.
+
+### 2.1 Rule catalog
+
+| Rule-id | Origin | Meaning | Exit code |
+|---|---|---|---|
+| **LCK-001** | `state-machine.py` `_StateLock` | Lock acquire timeout (5s) on `state.yml` — another agent holds the lock | `75` (EX_TEMPFAIL — retryable) |
+
+### 2.2 Lock conventions
+
+`state-machine.py` uses `fcntl.flock` (POSIX-only — framework is Linux-only per operator's env). Two modes:
+
+| Mode | Used by | Semantics |
+|---|---|---|
+| `LOCK_EX` (exclusive) | `cmd_advance` (read-modify-write writers) | One holder at a time; blocks shared readers |
+| `LOCK_SH` (shared) | `cmd_check`, `cmd_state` (read-only) | Multiple shared holders; blocks exclusive writers |
+
+Lock scope = the entire read-modify-write atomic unit (NOT just `save_state`). Locking only `save_state` would leave a race window between `load_state` and `save_state` in `cmd_advance`.
+
+Acquire timeout = **5 seconds**, polled every 50ms. On expiry: `sys.exit(75)` + `LCK-001` to stderr. The exit code matches `sysexits.h` `EX_TEMPFAIL` so callers can distinguish "retry me" from validation failures.
+
+### 2.3 Cross-references
+
+- **ADR-001** FW-004 State Machine — substrate this lock protects.
+- **§18 Groundedness Validation** (<TICKET-ID>) — sibling content-correctness layer; same operator-side rule-id pattern.
+
+## 3. Jira Lifecycle Policy: Done-not-Closed
+
+Added by <TICKET-ID> (Phase 4.1). Codifies an operator policy that affects every lifecycle skill: AI-driven workflows terminate Jira tickets at **`Done`**, never at `Closed`.
+
+### 3.1 Policy statement
+
+**Done is the terminal AI-driven state. Closed is operator-only.**
+
+`/update-docs` is the sole skill that transitions a ticket to `Done`, and it does so via Atlassian REST after the merge has landed (the trailing edge of the lifecycle). No skill, hook, or automation transitions a ticket to `Closed`, `Cancelled`, `Won't Do`, or any other non-Done terminal under any condition.
+
+### 3.2 Rationale
+
+- The operator's Jira dashboard needs in-flight visibility of completed-but-uncloseed tickets for retrospective + audit traversal. `Closed` removes the ticket from the active board view.
+- Sprint-closure operations (which move many `Done` tickets to `Closed` in one go) are operator-driven, deliberate, and batched — not agent-driven, ad-hoc, per-ticket.
+- A `Closed` transition is harder to reverse than a `Done` transition; agents should never make the harder-to-reverse choice on the operator's behalf.
+
+### 3.3 Implementation
+
+`/update-docs` Step 7 (added in this ticket; skill bumped to v2.0.0 X-major per §17):
+
+1. `GET /rest/api/3/issue/<TICKET>/transitions` — discover transition IDs.
+2. Find the transition whose `to.name == "Done"`.
+3. `POST /rest/api/3/issue/<TICKET>/transitions` with `{"transition": {"id": "<found-id>"}}`.
+4. On failure: log to stderr + continue (non-fatal). State-machine `documented` advance still succeeds. Operator transitions manually as fallback.
+
+No other skill transitions Jira beyond `/enrich-us` Step 6 (which moves `To Do` → `Pending refinement validation`, pre-dating §20).
+
+### 3.4 Forbidden transitions
+
+Any transition mapping to a Jira status whose `to.name` is `Closed`, `Cancelled`, `Won't Do`, or any project-specific equivalent that hides the ticket from the active board. If a future skill needs to handle ticket abandonment (e.g., "deviation Scope-Gap re-classified as Won't Fix"), it must surface the decision to the operator, not transition autonomously.
+
+### 3.5 Cross-references
+
+- **ADR-007** Phase 4 entry decisions — documents this policy alongside the multi-agent decisions.
+- **`.commands/update-docs.md`** v2.0.0 — the implementation surface.
+- **`.commands/enrich-us.md` Step 6** — the only other pattern; pre-dates §20 and is preserved as-is.
+- **`integration-state.md`** Changelog narrative — updated each ticket to record the `committed → Done` (Jira) + `documented` (local state machine) terminal pair.
+
+## 4. Pending Improvements Registry
+
+Added by <TICKET-ID> (2026-05-17). Solo-operator pause-friendly safety net: consolidates pending framework improvements into a single source of truth with structured triggers (auto-detectable shell commands + manual `next_check` dates). Companion CLI tool reports eligibility; **never auto-creates Jira tickets** (per `feedback_no_unsolicited_backlog_mining`).
+
+### 4.1 Registry contract
+
+File location: `forge/registers/pending-improvements.yml`.
+Schema: `forge/schemas/pending-improvements.schema.yml` (auto-detected by `validate-artifact.py` per the `/registers/pending-improvements\.ya?ml$` rule).
+Top-level shape: `{version: "1.0", generated_at: <ISO date>, entries: [...]}`.
+
+Each entry:
+
+```yaml
+- id: <kebab-case-slug>          # unique across registry
+  source: <attribution>          # audit chapter, follow-up doc, ADR, ticket §X
+  status: waiting | eligible | manual-check-due | done | withdrawn
+  trigger:
+    type: auto | manual
+    check: <shell-command-or-description>
+    timeout_seconds: <int 1-60>  # auto only; default 10
+  last_checked: <ISO date>       # optional
+  next_check: <ISO date>         # manual triggers only
+  cost_estimate: <free-form>     # e.g. "1h", "1-2 days"
+  value_estimate: low | medium | high | critical
+  note: <free-form>
+  created_at: <ISO date>
+```
+
+### 4.2 Trigger types + execution
+
+**`type: auto`** — `check` is a shell command. Tool subprocess-executes with timeout (default 10s, max 60s) and `cwd=framework_root`. Exit 0 = trigger fires → effective status becomes `eligible`. Non-zero exit OR timeout = effective status remains `waiting`. Tool never propagates trigger stderr (failures should be silent; eligibility is the only signal).
+
+**`type: manual`** — `check` is a one-line human-readable description of the activation condition. Tool compares `next_check` date to today: if `next_check ≤ today` → effective status becomes `manual-check-due`. The check field is informational; the date is the gate.
+
+### 4.3 Status lifecycle
+
+```
+                         ┌──────────────────────┐
+                         │      waiting         │
+                         └──────┬───────────────┘
+                                │
+              auto-trigger fires│       next_check ≤ today
+                                │       (manual entries)
+                  ┌─────────────┴──────────────┐
+                  ▼                            ▼
+            ┌──────────┐               ┌──────────────────┐
+            │ eligible │               │ manual-check-due │
+            └────┬─────┘               └────────┬─────────┘
+                 │                              │
+                 │   operator decides           │
+                 ▼                              ▼
+            ┌──────────────────────────────────────┐
+            │            done | withdrawn          │
+            └──────────────────────────────────────┘
+```
+
+Operator transitions to `done` when the improvement is shipped (typically as a Jira ticket merging to main). Operator transitions to `withdrawn` when re-evaluation concludes the improvement won't be pursued. Both are terminal; entries are not deleted (preserve history).
+
+The CLI tool **computes** `eligible`/`manual-check-due` dynamically from triggers — it does not persist these transitions unless the operator runs `--update-checked`. This means a registry entry can show `waiting` in YAML but report `eligible` in the live scan; the YAML is the operator-curated layer.
+
+### 4.4 Operator workflow
+
+**When to ADD an entry**:
+
+- During `/update-docs` Part 5 deviation classification, any deviation classified as `Deferred` or any Recommended Follow-up (record §11) becomes a registry candidate. Operator manually appends an entry. (Auto-coupling /update-docs → registry is a future enhancement; today it's manual.)
+- When opening a ticket whose scope explicitly defers something, the deferred item becomes a registry entry.
+- When the operator reviews ADRs/audits and identifies a UNASSIGNED item worth observing, an entry is added.
+
+**When to RUN the check**:
+
+- Invoking `/check-pending` skill in Claude Code (preferred).
+- Direct CLI: `python3 forge/tools/check-pending-improvements.py --report`.
+- Cron (optional, operator-installed): e.g. `0 9 * * 1 cd <framework> && python3 forge/tools/check-pending-improvements.py --eligible-only > /tmp/pending.log 2>&1` (Mondays at 09:00).
+- Pre-merge of any framework ticket (informally — before /verify, run --report to ensure no NEW eligibility triggered by your changes).
+
+**When to UPDATE `last_checked`**:
+
+- After reviewing an eligible/manual-check-due item without acting on it: `python3 forge/tools/check-pending-improvements.py --update-checked <id> --note "reviewed at /verify; defer 30 more days"`.
+- After acting on it (typically when the item ships as a Jira ticket): operator manually edits `status: done` + `last_checked: <today>` in the YAML (this transition is permanent enough to warrant manual curation).
+
+### 4.5 Cross-references
+
+- **ADR-004** (schema-driven validation) — `pending-improvements.schema.yml` extends this principle to a new artifact class.
+- **ADR-007** (Phase 4 entry decisions) — §4.2 + §4.3 conditional IFs map to registry entries `phase-4-2-otel` + `phase-4-3-opa` with auto/manual triggers grounded in the ADR-007 wording.
+- **§16 Framework Versioning** — registry tool is versioned via VERSION + skill via §17.
+- **§17 Skill Versioning** — `/check-pending` skill follows §17 (v1.0.0 baseline).
+- **§1.3.2 Escalation policy** — one of the registry's auto-triggers (`groundedness-ban-net-new`) tracks the §1.3.2 7-day precondition mensurable. When that trigger fires, the operator knows the warn→block flip is eligible.
+- **`feedback_no_unsolicited_backlog_mining`** — operationalized: tool surfaces eligibility but NEVER opens Jira tickets autonomously.
+

@@ -1,0 +1,307 @@
+# forge ticket lifecycle state machine
+#
+# Validates `.lifecycle/artifacts/<module>/state/<TICKET-ID>.yml`.
+# One file per ticket. Written by all 6 lifecycle commands (FW-004 wires this up).
+#
+# State transitions are monotonic:
+#   (none) → enriched → planned → developing → verified → committed → documented → closed
+#
+# Each command refuses to run if the previous step is not `done: true`. /commit
+# additionally refuses if verdict ∉ {PASS, PASS-WITH-DEBT}. These procedural
+# guards live in the commands (FW-004) — this schema only validates the shape.
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/state.schema.yml
+title: ai-specs Ticket State
+description: >
+  Lifecycle state for one ticket. Source of truth for "which step is next" and
+  "which artifacts have been produced". Used by the lifecycle state machine
+  (FW-004) to enforce ordering and refuse out-of-order command invocation.
+
+type: object
+required: [ticket, module, sprint, state, steps]
+additionalProperties: false
+
+properties:
+
+  ticket:
+    type: string
+    pattern: '^[A-Z][A-Z0-9]*-[0-9]+$'
+    description: Jira ticket ID (e.g., <TICKET-ID>, FW-001, SAT01-1).
+
+  module:
+    type: string
+    pattern: '^[a-z][a-z0-9-]*$'
+    description: >
+      Module name derived from code path (auth, users, dashboard, sat-cristian-garcia, ...).
+      Matches the directory under `.lifecycle/artifacts/<module>/`.
+
+  sprint:
+    type: string
+    pattern: '^(Sprint [0-9]+|SAT[0-9]+ S[0-9]+|backlog|Wave [0-9]+ - .+)$'
+    description: >
+      Sprint name as it appears in Jira (and as the folder name under plans/records).
+      Examples - "internal cycle", "SAT01 S1", "framework release layer - ai-specs reinforce", "backlog".
+
+  phase:
+    type: string
+    pattern: '^[0-9]+(\.[0-9]+)?$'
+    description: >
+      Sub-phase ID this ticket belongs to in the foreground program (e.g., "2.1").
+      OPTIONAL — when present, program-state-sync.py uses it for primary
+      bottom-up discovery. When absent (legacy state files), the sync falls
+      back to a heuristic match (module + active state + not-already-in-§6).
+      Added by D-012 (audit 2026-05-21 bottom-up discovery fallback).
+
+  state:
+    type: string
+    enum:
+      - enriched      # /enrich-us done
+      - planned       # /plan done
+      - developing    # /develop in progress
+      - verified      # /verify done with verdict
+      - committed     # /commit done (PR merged + branch deleted)
+      - documented    # /update-docs done (record + integration-state)
+      - closed        # all follow-ups created, ai-specs commit pushed
+    description: Furthest lifecycle step the ticket has reached.
+
+  steps:
+    type: object
+    required: [enrich-us, plan, develop, verify, commit, update-docs]
+    additionalProperties: false
+    properties:
+
+      enrich-us:
+        type: object
+        required: [done]
+        additionalProperties: false
+        properties:
+          done: { type: boolean }
+          timestamp: { type: string, format: date-time }
+          jira_hash:
+            type: string
+            description: SHA of the Jira description as enriched (for drift detection).
+
+      plan:
+        type: object
+        required: [done]
+        additionalProperties: false
+        properties:
+          done: { type: boolean }
+          timestamp: { type: string, format: date-time }
+          path:
+            type: string
+            description: Path to plan.md (e.g., changes/auth/plans/internal cycle/SCRUM-403_backend.md).
+          schema_validated:
+            type: boolean
+            description: True if /validate-artifact passed on the plan file.
+
+      develop:
+        type: object
+        required: [done]
+        additionalProperties: false
+        properties:
+          done: { type: boolean }
+          timestamp: { type: string, format: date-time }
+          branch:
+            type: string
+            pattern: '^(feature|fix)/[A-Z][A-Z0-9]*-[0-9]+(-[a-z0-9-]+)?$'
+            description: Feature branch name (feature/SCRUM-XXX-scope).
+          last_commit:
+            type: string
+            pattern: '^[0-9a-f]{7,40}$'
+            description: SHA of last commit on the feature branch.
+          plan_compliance_summary:
+            type: object
+            description: Per-step status reported by /develop (DONE / DONE-DEVIATED / PARTIAL / SKIPPED).
+            additionalProperties:
+              type: string
+              enum: [DONE, DONE-DEVIATED, PARTIAL, SKIPPED]
+
+      verify:
+        type: object
+        required: [done]
+        additionalProperties: false
+        properties:
+          done: { type: boolean }
+          timestamp: { type: string, format: date-time }
+          verdict:
+            type: string
+            enum: [PASS, PASS-WITH-DEBT, BLOCKED-RISK, BLOCKED-GAP, BLOCKED-BUILD]
+          path:
+            type: string
+            description: Path to _verify.md file.
+          schema_validated:
+            type: boolean
+          deviations_count: { type: integer, minimum: 0 }
+
+      commit:
+        type: object
+        required: [done]
+        additionalProperties: false
+        properties:
+          done: { type: boolean }
+          timestamp: { type: string, format: date-time }
+          pr:
+            type: integer
+            description: GitHub PR number.
+          merge_commit:
+            type: string
+            pattern: '^[0-9a-f]{7,40}$'
+          branch_deleted: { type: boolean }
+
+      update-docs:
+        type: object
+        required: [done]
+        additionalProperties: false
+        properties:
+          done: { type: boolean }
+          timestamp: { type: string, format: date-time }
+          record_path:
+            type: string
+            description: Path to record.md file.
+          record_schema_validated: { type: boolean }
+          ai_specs_commit:
+            type: string
+            pattern: '^[0-9a-f]{7,40}$'
+            description: SHA of the commit on ai-specs main (per /update-docs Part 6).
+          specs_updated:
+            type: array
+            description: List of spec files modified during this ticket.
+            items: { type: string }
+
+  deviations:
+    type: array
+    description: One entry per deviation classified by /verify or /classify-deviation.
+    items:
+      type: object
+      required: [category, description]
+      additionalProperties: false
+      properties:
+        step:
+          type: [string, integer]
+          description: Plan step the deviation belongs to (optional — some deviations don't map to a step).
+        category:
+          type: string
+          enum:
+            - Accepted-Trivial
+            - Accepted-Quality
+            - Accepted-Risk
+            - Deferred
+            - Pre-existing
+            - Scope-Gap
+        description:
+          type: string
+          minLength: 5
+          description: Short description of what deviated. Required for traceability.
+        ref:
+          type: string
+          description: Anchor into the verify or record document (e.g., "verify#deviation-1").
+        jira_ticket:
+          type: string
+          pattern: '^[A-Z][A-Z0-9]*-[0-9]+$'
+          description: Follow-up ticket created for this deviation (if any).
+        # Accepted-Risk extras (REQUIRED when category=Accepted-Risk; enforced via if/then below)
+        risk_description:
+          type: string
+          minLength: 5
+          description: What specific risk is introduced or accepted (Accepted-Risk only).
+        compensating_controls:
+          type: string
+          minLength: 5
+          description: Existing controls that reduce the risk (Accepted-Risk only).
+        residual_risk:
+          type: string
+          enum: [HIGH, MEDIUM, LOW, NEGLIGIBLE]
+          description: Residual risk level after compensating controls (Accepted-Risk only).
+        user_approved:
+          type: boolean
+          description: Explicit user approval for the risk acceptance (Accepted-Risk only, MUST be true).
+      allOf:
+        # When category=Accepted-Risk, the four risk-specific fields are required and user_approved must be true.
+        - if:
+            properties: { category: { const: Accepted-Risk } }
+          then:
+            required: [risk_description, compensating_controls, residual_risk, user_approved]
+            properties:
+              user_approved: { const: true }
+
+  follow_ups:
+    type: array
+    description: >
+      Recommended follow-ups noted during /update-docs. Each MUST either land in
+      Jira (status: jira-id-XXXX) or be explicitly marked as not-created with a
+      reason. The pre-merge gate from FW-034 reads this list.
+    items:
+      type: object
+      required: [title, status]
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 5 }
+        status:
+          oneOf:
+            - { type: string, enum: [not-created, draft] }
+            - { type: string, pattern: '^[A-Z][A-Z0-9]*-[0-9]+$' }
+        reason:
+          type: string
+          description: Required if status=not-created.
+        source_section:
+          type: string
+          description: Which record section spawned this (e.g., "Lessons Learned", "Bugs Found").
+
+# Monotonic transition guard: if state >= X, all steps before X must be done.
+# JSON Schema can't express transitions cleanly; the lifecycle commands (FW-004)
+# enforce this procedurally. The shape constraints below catch obvious mismatches
+# (e.g., state=committed but commit.done=false).
+allOf:
+
+  - if:
+      properties: { state: { enum: [enriched, planned, developing, verified, committed, documented, closed] } }
+    then:
+      properties:
+        steps:
+          properties:
+            enrich-us:
+              properties: { done: { const: true } }
+
+  - if:
+      properties: { state: { enum: [planned, developing, verified, committed, documented, closed] } }
+    then:
+      properties:
+        steps:
+          properties:
+            plan:
+              properties: { done: { const: true } }
+
+  - if:
+      properties: { state: { enum: [verified, committed, documented, closed] } }
+    then:
+      properties:
+        steps:
+          properties:
+            develop:
+              properties: { done: { const: true } }
+            verify:
+              properties: { done: { const: true } }
+
+  - if:
+      properties: { state: { enum: [committed, documented, closed] } }
+    then:
+      properties:
+        steps:
+          properties:
+            verify:
+              properties:
+                verdict:
+                  enum: [PASS, PASS-WITH-DEBT]
+            commit:
+              properties: { done: { const: true } }
+
+  - if:
+      properties: { state: { enum: [documented, closed] } }
+    then:
+      properties:
+        steps:
+          properties:
+            update-docs:
+              properties: { done: { const: true } }

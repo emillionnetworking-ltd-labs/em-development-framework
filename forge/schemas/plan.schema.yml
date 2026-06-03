@@ -1,0 +1,244 @@
+# forge Plan artifact schema
+#
+# Validates `.lifecycle/artifacts/<module>/plans/<sprint-or-wave>/SCRUM-XX_<scope>.md`.
+# Section list derived from `forge/.playbooks/plan.md` (16 backend / 14 frontend).
+#
+# Two-stage validation (see schemas/README.md): markdown is parsed into
+# { frontmatter, headings } and THIS schema validates that object.
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://ai-specs.em/schemas/plan.schema.yml
+title: ai-specs Plan Artifact
+description: >
+  Implementation plan produced by /plan, frozen at the start of /develop.
+  Required sections per scope match the templates in .commands/plan.md.
+
+type: object
+required: [frontmatter, headings]
+additionalProperties: true
+
+properties:
+
+  # ----- Frontmatter -----
+  frontmatter:
+    type: object
+    required: [schema, ticket, sprint, scope, module, date, status]
+    additionalProperties: false
+    properties:
+      schema:
+        const: ai-specs/schemas/plan.schema.yml
+      ticket:
+        type: string
+        pattern: '^[A-Z][A-Z0-9]*-[0-9]+$'
+      sprint:
+        type: string
+        pattern: '^(Sprint [0-9]+|SAT[0-9]+ S[0-9]+|backlog|Wave [0-9]+ - .+)$'
+      scope:
+        type: string
+        enum: [backend, frontend, fullstack]
+      module:
+        type: string
+        pattern: '^[a-z][a-z0-9-]*$'
+      date:
+        type: string
+        format: date
+      status:
+        type: string
+        enum: [draft, frozen]
+        description: >
+          'draft' while /plan is still being edited. 'frozen' once /develop
+          starts (workflow-standards.mdc §6 plan freshness rule).
+      last_completed_ticket:
+        type: string
+        pattern: '^[A-Z][A-Z0-9]*-[0-9]+$'
+        description: From Codebase State Snapshot.
+      framework_version:
+        type: string
+        pattern: '^\d+\.\d+\.\d+$'
+        description: >
+          SemVer 2.0.0 of em-development-framework at the time this plan
+          was written. Read from the VERSION file at framework root.
+          Optional for backward compatibility; introduced by <TICKET-ID>.
+          Distinct semantic from audit-phase-report.schema.yml's
+          framework_version field (which carries audit-standards version).
+
+  # ----- Headings (extracted from markdown body) -----
+  headings:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      required: [level, text]
+      additionalProperties: true
+      properties:
+        level: { type: integer, minimum: 1, maximum: 6 }
+        text: { type: string, minLength: 1 }
+
+# ----- Reusable section-match definitions -----
+$defs:
+
+  h1_present:
+    type: object
+    description: Plan must have a top-level title (H1) referencing the ticket.
+    properties:
+      level: { const: 1 }
+      text: { pattern: '^(Backend|Frontend|Fullstack) Implementation Plan: [A-Z][A-Z0-9]*-[0-9]+' }
+    required: [level, text]
+
+  # Helper: H2 section name (numbered or unnumbered).
+  # Each section gets its own $def for readability and reuse across scopes.
+
+  h2_codebase_state_snapshot:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Codebase State Snapshot' }
+    required: [level, text]
+
+  h2_regression_impact:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Regression Impact Analysis' }
+    required: [level, text]
+
+  h2_overview:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Overview' }
+    required: [level, text]
+
+  h2_architecture_context:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Architecture Context' }
+    required: [level, text]
+
+  h2_implementation_steps:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Implementation Steps' }
+    required: [level, text]
+
+  h2_implementation_order:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Implementation Order' }
+    required: [level, text]
+
+  h2_testing_checklist:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Testing Checklist' }
+    required: [level, text]
+
+  h2_error_response_format:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Error Response Format' }
+    required: [level, text]
+
+  h2_error_handling_patterns:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Error Handling Patterns' }
+    required: [level, text]
+
+  h2_dependencies:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Dependencies' }
+    required: [level, text]
+
+  h2_notes:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Notes' }
+    required: [level, text]
+
+  h2_next_steps:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Next Steps( After Implementation)?' }
+    required: [level, text]
+
+  h2_implementation_verification:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?Implementation Verification' }
+    required: [level, text]
+
+  h2_ui_ux_considerations:
+    type: object
+    properties:
+      level: { const: 2 }
+      text: { pattern: '^(\d+\.\s+)?UI/UX Considerations' }
+    required: [level, text]
+
+# ----- Required sections per scope -----
+#
+# Backend (13 required from the 16-section template; conditional sections
+#         "Partial Update Support", "Module-Level Planning", "Satellite App
+#         Planning" are not enforced at schema level — FW-002 can extend).
+# Frontend (12 required from the 14-section template; conditional sections
+#          "Module-Level Planning", "Satellite App Planning" not enforced).
+# Fullstack: union of backend + frontend (template uses --- separators).
+
+allOf:
+
+  - properties:
+      headings:
+        contains: { $ref: '#/$defs/h1_present' }
+
+  # ----- Backend or fullstack -----
+  - if:
+      properties:
+        frontmatter:
+          properties: { scope: { enum: [backend, fullstack] } }
+    then:
+      properties:
+        headings:
+          allOf:
+            - contains: { $ref: '#/$defs/h2_codebase_state_snapshot' }
+            - contains: { $ref: '#/$defs/h2_regression_impact' }
+            - contains: { $ref: '#/$defs/h2_overview' }
+            - contains: { $ref: '#/$defs/h2_architecture_context' }
+            - contains: { $ref: '#/$defs/h2_implementation_steps' }
+            - contains: { $ref: '#/$defs/h2_implementation_order' }
+            - contains: { $ref: '#/$defs/h2_testing_checklist' }
+            - contains: { $ref: '#/$defs/h2_error_response_format' }
+            - contains: { $ref: '#/$defs/h2_dependencies' }
+            - contains: { $ref: '#/$defs/h2_notes' }
+            - contains: { $ref: '#/$defs/h2_next_steps' }
+            - contains: { $ref: '#/$defs/h2_implementation_verification' }
+
+  # ----- Frontend or fullstack -----
+  - if:
+      properties:
+        frontmatter:
+          properties: { scope: { enum: [frontend, fullstack] } }
+    then:
+      properties:
+        headings:
+          allOf:
+            - contains: { $ref: '#/$defs/h2_overview' }
+            - contains: { $ref: '#/$defs/h2_architecture_context' }
+            - contains: { $ref: '#/$defs/h2_implementation_steps' }
+            - contains: { $ref: '#/$defs/h2_implementation_order' }
+            - contains: { $ref: '#/$defs/h2_testing_checklist' }
+            - contains: { $ref: '#/$defs/h2_error_handling_patterns' }
+            - contains: { $ref: '#/$defs/h2_dependencies' }
+            - contains: { $ref: '#/$defs/h2_notes' }
+            - contains: { $ref: '#/$defs/h2_next_steps' }
+            - contains: { $ref: '#/$defs/h2_implementation_verification' }

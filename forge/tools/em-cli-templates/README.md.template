@@ -1,0 +1,23 @@
+# em-cli scaffolded project
+
+This repo has been bootstrapped by the em-development-framework greenfield installer
+(`em-cli init --mode=greenfield`, Wave 27).
+
+## Generated artifacts
+
+- `forge.config.yml` — workspace contract (Wave 26 schema). Edit to refine the product
+  metadata, paths, and feature flags. Validates via `python3 forge/tools/validate-artifact.py forge.config.yml`.
+- `.lifecycle/artifacts/<product>/` — lifecycle artifacts (plans, records, state files).
+- `lifecycle/specs/` — placeholder standards (backend, frontend, integration-state,
+  workflow). Replace placeholders with your product-specific content.
+
+## Next steps
+
+1. Edit `forge.config.yml` to confirm `custom_standards`, `integration_state_path`,
+   `data_model_path`, `api_spec_path`, and `feature_flags` match your product.
+2. Replace placeholder content in `lifecycle/specs/*.mdc` with your actual standards.
+3. Start your first ticket via `/lifecycle <TICKET-KEY> <module>`.
+
+The framework's agent personas (`forge/.agents/backend-developer.md`,
+`forge/.agents/frontend-developer.md`) read `forge.config.yml` as their first pre-session
+read and adapt symbolically — no persona edits required.

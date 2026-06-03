@@ -1,0 +1,89 @@
+# Strategy v4 SCRUM-606: clean-distribution exclusion rules (export-ignore).
+# Hotfix v0.19.1 (DevSec audit 2026-06-01): additional deep-scrub rules.
+#
+# Affects `git archive` output (used by .github/workflows/release.yml to
+# generate em-framework-v*.tar.gz / .zip Release assets). Does NOT affect
+# `git clone` -- source repo retains full dev surface for contributors.
+#
+# Syntax: gitignore-style with /** for directory recursion (NOT trailing /),
+# no negation. See `git help gitattributes`.
+
+# Development lifecycle artifacts (our Sprint 1-21 plans/records/verify/state)
+.lifecycle/** export-ignore
+
+# Strategy session debate checkpoints (6+ historical sessions)
+orchestrator/.strategy-sessions/** export-ignore
+
+# Pre-reset deprecated content
+forge/_parked/** export-ignore
+
+# Internal-dev gates (groundedness baseline snapshot)
+forge/.groundedness-baseline.yml export-ignore
+
+# Distribution manifest (CI governance — frozen list of what SHOULD ship;
+# the manifest itself is internal, not user-facing — symmetric design)
+forge/.distribution-manifest.yml export-ignore
+
+# Cutover artifacts (Sprint 27 Wave 61 SCRUM-629 — operator-only tooling
+# for the one-time bifurcation cutover; inert after W61 executes;
+# not user-facing distribution surface)
+forge/CUTOVER_RUNBOOK.md export-ignore
+forge/tools/cutover_readiness_check.py export-ignore
+forge/tools/cutover_first_mirror_push.py export-ignore
+
+# Detailed dev-compliance contributor guide (Sprint 27 Wave 62 SCRUM-630):
+# PRIVATE-only. End-users see the public-facing CONTRIBUTING.md instead.
+# Note: CI separation per ADR-014 §D9 is already enforced by the broader
+# `.github/** export-ignore` rule below — ALL workflows are PRIVATE-only,
+# which is stricter than (and supersedes) ADR-014's original "install-matrix +
+# release ship to PUBLIC" intent. The stricter version is preferable: PUBLIC
+# is pure distribution surface with zero CI machinery; the mirror bot is the
+# only writer to PUBLIC main.
+CONTRIBUTING-DEV.md export-ignore
+
+# Test surfaces (dev-only; user-runtime doesn't need them)
+forge/tools/_tests/** export-ignore
+framework/tests/** export-ignore
+orchestrator/tests/** export-ignore
+forge/evals/** export-ignore
+conftest.py export-ignore
+pytest.ini export-ignore
+
+# Dev-only deps (user needs only requirements.txt)
+requirements-dev.txt export-ignore
+
+# Hardcoded dogfood config (em-cli init regenerates per-operator on greenfield)
+forge.config.yml export-ignore
+
+# Ephemeral build/cache artifacts
+__pycache__/** export-ignore
+.pytest_cache/** export-ignore
+
+# ============================================================
+# Hotfix v0.19.1 deep-scrub additions (DevSec audit 2026-06-01)
+# ============================================================
+
+# Operator IDE config (Claude Code specific; users may use Cursor/Copilot/etc.)
+.claude/** export-ignore
+
+# Build-time utilities for OUR release pipeline (user has no use-case)
+scripts/** export-ignore
+
+# Operator CI workflows (release.yml would fire on USER's tag pushes — leak)
+.github/** export-ignore
+
+# Framework-protocol changelog (developer-facing; root CHANGELOG.md is user-facing)
+forge/CHANGELOG.md export-ignore
+
+# Operator-internal governance state snapshots
+forge/.framework-modules.yml export-ignore
+forge/.checks-registry.yml export-ignore
+forge/.deviation-taxonomy.yml export-ignore
+forge/registers/** export-ignore
+
+# Sprint history journal (developer-facing changelog; user gets stub via em-cli init)
+forge/specs/integration-state.md export-ignore
+
+# Internal bypass registry — append-only log of intentional hook/CI skips with
+# operator-internal reasons; not consumed by end-user runtime. SCRUM-625 W57.
+forge/bypass-log.yml export-ignore
