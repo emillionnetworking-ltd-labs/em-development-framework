@@ -69,10 +69,12 @@ def _drive(args) -> int:
 
     if args.mode == "lifecycle":
         app, config, fresh = _session.build_lifecycle_session(
-            args.ticket, args.module, work_impl=args.work_impl)
+            args.ticket, args.module, work_impl=args.work_impl,
+            output_dir=args.output_dir)
     else:
         app, config, fresh = _session.build_strategy_session(
-            args.target, work_impl=args.work_impl)
+            args.target, work_impl=args.work_impl,
+            output_dir=args.output_dir)
 
     if args.resume:
         feed = None
@@ -105,6 +107,15 @@ def main(argv=None) -> int:
     p.add_argument("--decision", choices=["approve", "refine", "abort"])
     p.add_argument("--status", action="store_true")
     p.add_argument("--work-impl", default="stub")
+    p.add_argument(
+        "--output-dir",
+        default=None,
+        help=(
+            "Directory where generated state (checkpoints, strategy sessions) "
+            "is written. Overrides EM_FRAMEWORK_OUTPUT_DIR + forge.config.yml. "
+            "Default: .em-out/ in the current working directory."
+        ),
+    )
     args = p.parse_args(argv)
 
     try:

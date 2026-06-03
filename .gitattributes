@@ -45,6 +45,7 @@ CONTRIBUTING-DEV.md export-ignore
 forge/tools/_tests/** export-ignore
 framework/tests/** export-ignore
 orchestrator/tests/** export-ignore
+framework/_runtime/orchestrator/tests/** export-ignore
 forge/evals/** export-ignore
 conftest.py export-ignore
 pytest.ini export-ignore
@@ -87,3 +88,60 @@ forge/specs/integration-state.md export-ignore
 # Internal bypass registry — append-only log of intentional hook/CI skips with
 # operator-internal reasons; not consumed by end-user runtime. SCRUM-625 W57.
 forge/bypass-log.yml export-ignore
+
+# ============================================================================
+# Sprint 28 Wave 66 SCRUM-634: aggressive distribution cut per ADR-015.
+# Strategy goal A — IP/methodology MUST NOT ship to PUBLIC.
+# Note: We use explicit sub-directory excludes rather than `forge/** export-ignore`
+# with negations, because `-export-ignore` negation does not reliably override
+# the wholesale pattern in `git archive`.
+# ============================================================================
+
+# Methodology + governance content (PRIVATE-only per ADR-015 goal A).
+forge/.agents/** export-ignore
+forge/.playbooks/** export-ignore
+forge/specs/** export-ignore
+forge/registers/** export-ignore
+forge/templates/** export-ignore
+forge/secrets-policy.md export-ignore
+forge/.anti-rot-allowlist.yml export-ignore
+forge/.groundedness-allowlist.yml export-ignore
+
+# Operator-only tools (forge/tools/ minus user-facing CLIs).
+# User-facing keeps (not ignored): em-cli.py, em-cli-templates/, mcp_server.py,
+# init-state.py, validate_distribution_manifest.py, compare_mirror_tag_tree.py.
+forge/tools/anti_rot_checker.py export-ignore
+forge/tools/audit-completion-check.py export-ignore
+forge/tools/audit-coupling-check.py export-ignore
+forge/tools/check-pending-improvements.py export-ignore
+forge/tools/classify-deviation.py export-ignore
+forge/tools/groundedness-snapshot.py export-ignore
+forge/tools/hooks/** export-ignore
+forge/tools/meta-audit/** export-ignore
+forge/tools/sprint-cleanup.py export-ignore
+forge/tools/state-machine.py export-ignore
+forge/tools/state-template.yml export-ignore
+forge/tools/validate-artifact.py export-ignore
+forge/tools/verify-checks.py export-ignore
+forge/tools/_anti_rot_checker.py export-ignore
+forge/tools/_catalog.py export-ignore
+forge/tools/_classify_deviation.py export-ignore
+forge/tools/_common.py export-ignore
+forge/tools/_groundedness/** export-ignore
+forge/tools/_init_atomicity.py export-ignore
+forge/tools/_init_state.py export-ignore
+forge/tools/_lifecycle_state.py export-ignore
+forge/tools/_pending_improvements.py export-ignore
+forge/tools/_sprint_cleanup.py export-ignore
+forge/tools/_state_machine.py export-ignore
+forge/tools/_validate_artifact.py export-ignore
+forge/tools/_verify_checks.py export-ignore
+# W59 mirror infrastructure helpers — operator-only (drift detection,
+# manifest validation for the maintainer's release pipeline).
+forge/tools/compare_mirror_tag_tree.py export-ignore
+forge/tools/validate_distribution_manifest.py export-ignore
+
+# Legacy orchestrator/ — post-W64 contains only export-ignored dotdirs but
+# this rule formalizes the intent that the orchestrator/ tree-name is
+# PRIVATE-only (the runtime now lives at framework/_runtime/orchestrator/).
+orchestrator/** export-ignore

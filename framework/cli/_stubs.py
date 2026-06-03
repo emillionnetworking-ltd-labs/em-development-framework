@@ -8,7 +8,7 @@ re-housed here as importable fixtures (the test dirs are not packages). The
 register the real `ClaudeCodeWorkLayer` / `ClaudeCodeStrategyTools`.
 """
 
-from strategy_state import Proposal, Critique  # orchestrator on sys.path via framework.cli
+from framework._runtime.orchestrator.strategy_state import Proposal, Critique  # orchestrator on sys.path via framework.cli
 
 
 class StubWorkLayer:

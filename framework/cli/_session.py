@@ -14,13 +14,13 @@ from typing import Optional
 import yaml
 
 # orchestrator brains (on sys.path via framework.cli.__init__)
-from graph_state import GraphState
-from strategy_state import StrategyState
-from lifecycle_graph import build_graph
-from strategy_graph import build_strategy_graph
-from checkpointer import StateYamlCheckpointer
-from strategy_checkpointer import StrategySnapshotSaver
-from _state_machine import load_state_typed, state_path
+from framework._runtime.orchestrator.graph_state import GraphState
+from framework._runtime.orchestrator.strategy_state import StrategyState
+from framework._runtime.orchestrator.lifecycle_graph import build_graph
+from framework._runtime.orchestrator.strategy_graph import build_strategy_graph
+from framework._runtime.orchestrator.checkpointer import StateYamlCheckpointer
+from framework._runtime.orchestrator.strategy_checkpointer import StrategySnapshotSaver
+from framework._runtime.state._state_machine import load_state_typed, state_path
 from pathlib import Path
 
 from langgraph.types import Command
@@ -51,27 +51,74 @@ def _load_workspace_config(root: str) -> Optional[dict]:
 
 # ---- session builders ----
 
+def _resolve_paths(root: str, output_dir_cli: Optional[str] = None):
+    """Resolve (checkpoints_dir, sessions_dir) per the 5-level precedence.
+
+    Inputs: CLI ``--output-dir`` value (or None), env var,
+    ``forge.config.yml::output_dir`` (or None / sentinel), default.
+
+    Legacy-mode trigger: when forge.config.yml exists at the repo root AND
+    its ``output_dir`` is ``.`` or unset AND no CLI/env/ctor override, use
+    repo-relative paths (operator dogfood backwards-compat).
+    """
+    from framework.api import (
+        resolve_output_dir, is_legacy_mode,
+        _legacy_paths_for_repo,
+        CHECKPOINTS_SUBDIR, SESSIONS_SUBDIR,
+    )
+    config_path = Path(root) / "forge.config.yml"
+    config_file_exists = config_path.is_file()
+    config_file_value: Optional[str] = None
+    if config_file_exists:
+        try:
+            with config_path.open(encoding="utf-8") as fh:
+                cfg = yaml.safe_load(fh) or {}
+            config_file_value = cfg.get("output_dir") if isinstance(cfg, dict) else None
+        except (yaml.YAMLError, OSError):
+            config_file_value = None
+    if is_legacy_mode(
+        cli_value=output_dir_cli,
+        ctor_value=None,
+        config_file_value=config_file_value,
+        config_file_exists=config_file_exists,
+    ):
+        return _legacy_paths_for_repo(Path(root))
+    output_dir = resolve_output_dir(
+        cli_value=output_dir_cli,
+        config_file_value=config_file_value,
+        config_file_exists=config_file_exists,
+    )
+    return output_dir / CHECKPOINTS_SUBDIR, output_dir / SESSIONS_SUBDIR
+
+
 def build_lifecycle_session(ticket: str, module: str, *, work_impl: str = "stub",
-                            checkpoints_dir=None, root: Optional[str] = None):
+                            checkpoints_dir=None, root: Optional[str] = None,
+                            output_dir: Optional[str] = None):
     root = root or str(repo_root())
     work = WORK_IMPLS[work_impl]()
+    if checkpoints_dir is None:
+        checkpoints_dir, _ = _resolve_paths(root, output_dir)
     cp = StateYamlCheckpointer(checkpoints_dir=checkpoints_dir, root=root)
     app = build_graph(work, checkpointer=cp)
     config = {"configurable": {"thread_id": ticket}}
     initial = GraphState.from_disk(module, ticket, root)
-    # <TICKET-ID> framework release layer (Pilar 1.2): inject workspace context from forge.config.yml
+    # Pilar 1.2 — workspace context injection from forge.config.yml
     initial.workspace = _load_workspace_config(root)
     return app, config, initial
 
 
 def build_strategy_session(target: str, *, work_impl: str = "stub", sessions_dir=None,
-                          root: Optional[str] = None):
+                          root: Optional[str] = None,
+                          output_dir: Optional[str] = None):
+    root = root or str(repo_root())
     tools = STRATEGY_IMPLS[work_impl]()
+    if sessions_dir is None:
+        _, sessions_dir = _resolve_paths(root, output_dir)
     saver = StrategySnapshotSaver(sessions_dir=sessions_dir)
     app = build_strategy_graph(tools, checkpointer=saver)
     config = {"configurable": {"thread_id": slug(target)}}
-    # <TICKET-ID> framework release layer (Pilar 1.2): load workspace from forge.config.yml
-    workspace = _load_workspace_config(root or str(repo_root()))
+    # Pilar 1.2 — workspace context injection from forge.config.yml
+    workspace = _load_workspace_config(root)
     initial = StrategyState(target_context=target, business_criteria=["security", "determinism"],
                             workspace=workspace)
     return app, config, initial

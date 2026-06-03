@@ -14,7 +14,7 @@ the node on resume is side-effect-free.
 
 from langgraph.types import interrupt
 
-from strategy_state import Proposal, Critique  # orchestrator on sys.path via framework.cli
+from framework._runtime.orchestrator.strategy_state import Proposal, Critique  # orchestrator on sys.path via framework.cli
 from framework.cli._protocol import PHASE_GATES
 
 # The return contract per phase: the advance-fields the agent must feed back. Hyphen

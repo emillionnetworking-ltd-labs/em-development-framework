@@ -12,16 +12,16 @@ End users (operators who want to USE the framework, not develop it) should downl
 
 ```bash
 # Linux / macOS
-curl -L https://github.com/emillionnetworking-ltd-labs/em-development-framework/releases/latest/download/em-framework-v0.20.0.tar.gz | tar xz
-cd em-framework-v0.20.0
+curl -L https://github.com/emillionnetworking-ltd-labs/em-development-framework/releases/latest/download/em-framework-v0.22.0.tar.gz | tar xz
+cd em-framework-v0.22.0
 ./forge/distribution/install.sh
 ```
 
 ```powershell
 # Windows
-Invoke-WebRequest -Uri https://github.com/emillionnetworking-ltd-labs/em-development-framework/releases/latest/download/em-framework-v0.20.0.zip -OutFile em-framework.zip
+Invoke-WebRequest -Uri https://github.com/emillionnetworking-ltd-labs/em-development-framework/releases/latest/download/em-framework-v0.22.0.zip -OutFile em-framework.zip
 Expand-Archive em-framework.zip -DestinationPath .
-cd em-framework-v0.20.0
+cd em-framework-v0.22.0
 .\forge\distribution\install.ps1
 ```
 
@@ -29,7 +29,44 @@ Verify archive integrity via the `SHA256SUMS` asset on the same release.
 
 The clean distribution OMITS development surface (`.lifecycle/`, strategy session debates, internal tests, hardcoded dogfood config). Contributors who want full source for development continue with `git clone`.
 
-> **Repository structure**: this is the public **distribution mirror**. Development happens in a separate private source repo where the framework's own lifecycle workflow drives release production. Community feedback flows through GitHub Discussions (see [`CONTRIBUTING.md`](CONTRIBUTING.md) for details). See [ADR-014](forge/specs/adrs/adr-014-repo-bifurcation-private-dev-public-mirror.md) for the bifurcation architecture rationale.
+> **Repository structure**: this is the public **distribution mirror**. Development happens in a separate private source repo where the framework's own lifecycle workflow drives release production. Community feedback flows through GitHub Discussions (see [`CONTRIBUTING.md`](CONTRIBUTING.md) for details).
+
+## Workspace anatomy
+
+The framework's installation directory is treated as **read-only post-install**. All generated state — state machine files, strategy session checkpoints, audit logs — lives in a separate **user-controlled output directory** that you choose. The default is `.em-out/` in your current working directory; you can override it via CLI flag, env var, or programmatic constructor.
+
+```python
+from framework import Framework
+fw = Framework(output_dir="./my-workspace")
+```
+
+CLI:
+```bash
+python -m framework.cli.run --output-dir ./my-workspace --mode lifecycle ...
+```
+
+Env var:
+```bash
+export EM_FRAMEWORK_OUTPUT_DIR=./my-workspace
+python -m framework.cli.run --mode lifecycle ...
+```
+
+Precedence: CLI flag > constructor arg > env var > default (`.em-out/`).
+
+## Security model
+
+The workspace isolation enforced by v0.22.0 closes two attack patterns. First, **IP isolation**: the framework's internal methodology (specs, playbooks, agents) is excluded from the distribution — your installation contains only the executable engine. Second, **secret isolation**: the framework's installation directory is read-only, so your project secrets cannot accidentally land inside the framework code when you back up or share your workspace. Generated state goes to `.em-out/` (or your chosen path) which lives in your project, not in the framework install.
+
+### Recommended `.gitignore` for projects using the framework
+
+```
+.em-out/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+```
 
 ## Documentation
 

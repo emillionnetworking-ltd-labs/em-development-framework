@@ -1,10 +1,19 @@
 # Copyright (c) 2026 EMillion Networking LTD
 # SPDX-License-Identifier: MIT
-"""framework/ — the unified entrypoint app dir (framework release layer, El Despertar de la Maquinaria).
+"""framework/ — the em-development-framework public package.
 
-The 4th sibling app dir (after ai-specs/, control-plane/, orchestrator/). It holds
-the CLI 'baton' that drives the compiled LangGraph brains (lifecycle + strategy)
-and translates their interrupts into console exit-codes for an autonomous agent.
-One-way read-only dependency on orchestrator/ + ai-specs/tools; nothing upstream
-imports framework/.
+Post W64 SCRUM-632: framework is fully self-contained. It holds the public
+Framework API class (api.py), the CLI 'baton' (cli/) that drives the compiled
+LangGraph brains, and the relocated runtime engine internals (_runtime/).
+
+Public API:
+    from framework import Framework
+    fw = Framework(output_dir="./my-workspace")
+
+CLI:
+    python -m framework.cli.run --mode lifecycle ...
 """
+
+from framework.api import Framework
+
+__all__ = ["Framework"]
