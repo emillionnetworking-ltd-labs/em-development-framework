@@ -18,11 +18,10 @@ Usage:
   python3 compare_mirror_tag_tree.py --public-repo <slug> --private-tag <tag> --json
 """
 import argparse
+import io
 import json
-import os
 import subprocess
 import sys
-import tempfile
 import tarfile
 from pathlib import Path
 
@@ -32,25 +31,23 @@ def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
 
 
 def fetch_private_tree(tag: str) -> set[str]:
-    cp = run(["git", "archive", "--format=tar", tag])
+    cp = subprocess.run(
+        ["git", "archive", "--format=tar", tag],
+        check=False, capture_output=True,
+    )
     if cp.returncode != 0:
         print(
-            f"ERROR: git archive failed for tag {tag}: {cp.stderr.strip()}",
+            f"ERROR: git archive failed for tag {tag}: "
+            f"{cp.stderr.decode(errors='replace').strip()}",
             file=sys.stderr,
         )
         sys.exit(2)
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".tar") as tmp:
-        tmp.write(cp.stdout.encode("latin-1", errors="replace"))
-        tmp_path = tmp.name
-    try:
-        out = set()
-        with tarfile.open(tmp_path, "r") as t:
-            for m in t.getmembers():
-                if m.isfile():
-                    out.add(m.name)
-        return out
-    finally:
-        os.unlink(tmp_path)
+    out = set()
+    with tarfile.open(fileobj=io.BytesIO(cp.stdout), mode="r") as t:
+        for m in t.getmembers():
+            if m.isfile():
+                out.add(m.name)
+    return out
 
 
 def fetch_public_tree(repo: str, tag: str) -> set[str]:
