@@ -12,16 +12,16 @@ End users (operators who want to USE the framework, not develop it) should downl
 
 ```bash
 # Linux / macOS
-curl -L https://github.com/emillionnetworking-ltd-labs/em-development-framework/releases/latest/download/em-framework-v0.22.0.tar.gz | tar xz
-cd em-framework-v0.22.0
+curl -L https://github.com/emillionnetworking-ltd-labs/em-development-framework/releases/latest/download/em-framework-v0.23.0.tar.gz | tar xz
+cd em-framework-v0.23.0
 ./forge/distribution/install.sh
 ```
 
 ```powershell
 # Windows
-Invoke-WebRequest -Uri https://github.com/emillionnetworking-ltd-labs/em-development-framework/releases/latest/download/em-framework-v0.22.0.zip -OutFile em-framework.zip
+Invoke-WebRequest -Uri https://github.com/emillionnetworking-ltd-labs/em-development-framework/releases/latest/download/em-framework-v0.23.0.zip -OutFile em-framework.zip
 Expand-Archive em-framework.zip -DestinationPath .
-cd em-framework-v0.22.0
+cd em-framework-v0.23.0
 .\forge\distribution\install.ps1
 ```
 
@@ -33,7 +33,9 @@ The clean distribution OMITS development surface (`.lifecycle/`, strategy sessio
 
 ## Workspace anatomy
 
-The framework's installation directory is treated as **read-only post-install**. All generated state — state machine files, strategy session checkpoints, audit logs — lives in a separate **user-controlled output directory** that you choose. The default is `.em-out/` in your current working directory; you can override it via CLI flag, env var, or programmatic constructor.
+The framework's installation directory is treated as **strictly read-only at runtime**. *Every* write triggered by framework execution — the canonical `state.yml` + `.lifecycle/artifacts/` tree (plans, verify reports, records), langgraph checkpoints, strategy session snapshots, any future logs or caches — lives in a **user-controlled output directory** that you choose. The boundary is absolute: there is no asymmetric behavior between dogfood and end-user environments, and the framework code tree is mechanically enforced read-only by the test suite.
+
+The default output directory is `.em-out/` in your current working directory; you can override it via CLI flag, env var, or programmatic constructor.
 
 ```python
 from framework import Framework
@@ -53,9 +55,26 @@ python -m framework.cli.run --mode lifecycle ...
 
 Precedence: CLI flag > constructor arg > env var > default (`.em-out/`).
 
+### Layout under `output_dir`
+
+```
+<output_dir>/
+  .lifecycle/
+    artifacts/
+      <module>/
+        state/<ticket>.yml      ← canonical lifecycle state
+        plans/<wave>/...md       ← /plan artifacts
+        verify/<wave>/...md      ← /verify reports
+        records/<wave>/...md     ← /update-docs records
+  checkpoints/
+    <thread>/<seq>-<id>.json    ← langgraph lifecycle checkpoints
+  strategy-sessions/
+    <thread>/<seq>-<id>.json    ← strategy engine snapshots
+```
+
 ## Security model
 
-The workspace isolation enforced by v0.22.0 closes two attack patterns. First, **IP isolation**: the framework's internal methodology (specs, playbooks, agents) is excluded from the distribution — your installation contains only the executable engine. Second, **secret isolation**: the framework's installation directory is read-only, so your project secrets cannot accidentally land inside the framework code when you back up or share your workspace. Generated state goes to `.em-out/` (or your chosen path) which lives in your project, not in the framework install.
+The workspace isolation enforced by v0.23.0 closes two attack patterns. First, **IP isolation**: the framework's internal methodology (specs, playbooks, agents) is excluded from the distribution — your installation contains only the executable engine. Second, **secret isolation**: the framework's installation directory is read-only, so your project secrets cannot accidentally land inside the framework code when you back up or share your workspace. Generated state goes to `.em-out/` (or your chosen path) which lives in your project, not in the framework install.
 
 ### Recommended `.gitignore` for projects using the framework
 

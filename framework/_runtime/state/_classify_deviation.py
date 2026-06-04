@@ -116,7 +116,7 @@ JIRA_RULES = {
 
 # ---------- helpers ----------
 
-from framework._runtime.state._common import find_repo_root, resolve_artifacts_root, ARTIFACTS_SUBPATH  # noqa: E402
+from framework._runtime.state._common import find_framework_install_root, resolve_artifacts_root, ARTIFACTS_SUBPATH  # noqa: E402
 # Reuse the lifecycle's single locked writer + typed model:
 # classify shares ONE flock-serialized writer with the state machine instead of
 # owning a second, unsynchronized writer to state.yml.
@@ -500,7 +500,7 @@ def _classify_run(args):
     repo_root = None
     sp = None
     if not args.dry_run:
-        repo_root = find_repo_root(Path.cwd())
+        repo_root = find_framework_install_root(Path.cwd())
         if repo_root is None:
             print('ERROR: framework repo root not found (no forge/schemas/ in any parent of cwd).',
                   file=sys.stderr)

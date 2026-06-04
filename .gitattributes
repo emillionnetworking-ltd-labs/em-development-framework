@@ -145,3 +145,7 @@ forge/tools/validate_distribution_manifest.py export-ignore
 # this rule formalizes the intent that the orchestrator/ tree-name is
 # PRIVATE-only (the runtime now lives at framework/_runtime/orchestrator/).
 orchestrator/** export-ignore
+
+# W68 SCRUM-636: .em-out/ is the operator's workspace output directory
+# (lifecycle artifacts post-Sprint-28.5 cutover). Internal; not user-facing.
+.em-out/** export-ignore

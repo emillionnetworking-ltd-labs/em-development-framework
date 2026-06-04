@@ -8,6 +8,7 @@ and exposes the helpers run.py uses to classify the stop and build the WorkReque
 All orchestration lives here; run.py stays a thin arg-parser → exit-code mapper.
 """
 
+import os
 import re
 from typing import Optional
 
@@ -25,7 +26,6 @@ from pathlib import Path
 
 from langgraph.types import Command
 
-from framework.cli import repo_root
 from framework.cli._protocol import WorkRequest, classify_stop, exit_code_for, EXIT_WORK
 from framework.cli._stubs import WORK_IMPLS, STRATEGY_IMPLS
 
@@ -51,74 +51,85 @@ def _load_workspace_config(root: str) -> Optional[dict]:
 
 # ---- session builders ----
 
-def _resolve_paths(root: str, output_dir_cli: Optional[str] = None):
-    """Resolve (checkpoints_dir, sessions_dir) per the 5-level precedence.
+def _resolve_paths(workspace_cwd: str, output_dir_cli: Optional[str] = None) -> tuple:
+    """Resolve (artifact_root, checkpoints_dir, sessions_dir) per precedence ladder.
 
-    Inputs: CLI ``--output-dir`` value (or None), env var,
-    ``forge.config.yml::output_dir`` (or None / sentinel), default.
+    Per ADR-015 + W68 SCRUM-636 absolute boundary: NO legacy-mode trigger.
+    ``output_dir`` is THE root for all writes. ``workspace_cwd`` is consulted
+    only to find ``forge.config.yml`` for the config-file precedence level.
 
-    Legacy-mode trigger: when forge.config.yml exists at the repo root AND
-    its ``output_dir`` is ``.`` or unset AND no CLI/env/ctor override, use
-    repo-relative paths (operator dogfood backwards-compat).
+    Precedence (highest first):
+      1. CLI flag (--output-dir)
+      2. forge.config.yml::output_dir
+      3. EM_FRAMEWORK_OUTPUT_DIR env var
+      4. .em-out/ in workspace_cwd
     """
     from framework.api import (
-        resolve_output_dir, is_legacy_mode,
-        _legacy_paths_for_repo,
-        CHECKPOINTS_SUBDIR, SESSIONS_SUBDIR,
+        resolve_output_dir, CHECKPOINTS_SUBDIR, SESSIONS_SUBDIR,
     )
-    config_path = Path(root) / "forge.config.yml"
-    config_file_exists = config_path.is_file()
+    config_path = Path(workspace_cwd) / "forge.config.yml"
     config_file_value: Optional[str] = None
-    if config_file_exists:
+    if config_path.is_file():
         try:
             with config_path.open(encoding="utf-8") as fh:
                 cfg = yaml.safe_load(fh) or {}
             config_file_value = cfg.get("output_dir") if isinstance(cfg, dict) else None
         except (yaml.YAMLError, OSError):
             config_file_value = None
-    if is_legacy_mode(
-        cli_value=output_dir_cli,
-        ctor_value=None,
-        config_file_value=config_file_value,
-        config_file_exists=config_file_exists,
-    ):
-        return _legacy_paths_for_repo(Path(root))
     output_dir = resolve_output_dir(
         cli_value=output_dir_cli,
         config_file_value=config_file_value,
-        config_file_exists=config_file_exists,
+        cwd=Path(workspace_cwd),
     )
-    return output_dir / CHECKPOINTS_SUBDIR, output_dir / SESSIONS_SUBDIR
+    return output_dir, output_dir / CHECKPOINTS_SUBDIR, output_dir / SESSIONS_SUBDIR
+
+
+def _derive_session_paths(root: Optional[str], output_dir: Optional[str]) -> tuple:
+    """Resolve (artifact_root, checkpoints_dir, sessions_dir) for a session.
+
+    Two paths:
+      - `root` provided (test escape hatch): artifact_root = root; checkpoints/
+        sessions default to subdirs under root.
+      - `root` is None (normal CLI flow): full precedence ladder via
+        _resolve_paths(cwd, output_dir).
+    """
+    from framework.api import CHECKPOINTS_SUBDIR, SESSIONS_SUBDIR
+    if root is not None:
+        artifact_root = Path(root)
+        return (artifact_root,
+                artifact_root / CHECKPOINTS_SUBDIR,
+                artifact_root / SESSIONS_SUBDIR)
+    return _resolve_paths(os.getcwd(), output_dir)
 
 
 def build_lifecycle_session(ticket: str, module: str, *, work_impl: str = "stub",
                             checkpoints_dir=None, root: Optional[str] = None,
                             output_dir: Optional[str] = None):
-    root = root or str(repo_root())
-    work = WORK_IMPLS[work_impl]()
+    artifact_root, computed_checkpoints, _ = _derive_session_paths(root, output_dir)
     if checkpoints_dir is None:
-        checkpoints_dir, _ = _resolve_paths(root, output_dir)
-    cp = StateYamlCheckpointer(checkpoints_dir=checkpoints_dir, root=root)
+        checkpoints_dir = computed_checkpoints
+    work = WORK_IMPLS[work_impl]()
+    cp = StateYamlCheckpointer(checkpoints_dir=checkpoints_dir, root=str(artifact_root))
     app = build_graph(work, checkpointer=cp)
     config = {"configurable": {"thread_id": ticket}}
-    initial = GraphState.from_disk(module, ticket, root)
+    initial = GraphState.from_disk(module, ticket, str(artifact_root))
     # Pilar 1.2 — workspace context injection from forge.config.yml
-    initial.workspace = _load_workspace_config(root)
+    initial.workspace = _load_workspace_config(str(artifact_root))
     return app, config, initial
 
 
 def build_strategy_session(target: str, *, work_impl: str = "stub", sessions_dir=None,
                           root: Optional[str] = None,
                           output_dir: Optional[str] = None):
-    root = root or str(repo_root())
-    tools = STRATEGY_IMPLS[work_impl]()
+    artifact_root, _, computed_sessions = _derive_session_paths(root, output_dir)
     if sessions_dir is None:
-        _, sessions_dir = _resolve_paths(root, output_dir)
+        sessions_dir = computed_sessions
+    tools = STRATEGY_IMPLS[work_impl]()
     saver = StrategySnapshotSaver(sessions_dir=sessions_dir)
     app = build_strategy_graph(tools, checkpointer=saver)
     config = {"configurable": {"thread_id": slug(target)}}
     # Pilar 1.2 — workspace context injection from forge.config.yml
-    workspace = _load_workspace_config(root)
+    workspace = _load_workspace_config(str(artifact_root))
     initial = StrategyState(target_context=target, business_criteria=["security", "determinism"],
                             workspace=workspace)
     return app, config, initial
@@ -216,9 +227,10 @@ def build_request(snap, mode: str, thread_id: str, interrupt_value=None):
     return req, code
 
 
-def lifecycle_status(ticket: str, module: str, root: Optional[str] = None) -> Optional[dict]:
-    root = root or str(repo_root())
-    lc = load_state_typed(state_path(Path(root), module, ticket))
+def lifecycle_status(ticket: str, module: str, root: Optional[str] = None,
+                     output_dir: Optional[str] = None) -> Optional[dict]:
+    artifact_root, _, _ = _derive_session_paths(root, output_dir)
+    lc = load_state_typed(state_path(artifact_root, module, ticket))
     if lc is None:
         return None
     sd = lc.to_state_dict()

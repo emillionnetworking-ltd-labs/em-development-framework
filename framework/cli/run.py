@@ -19,7 +19,7 @@ import subprocess
 import sys
 
 from framework.cli._protocol import EXIT_DONE, EXIT_ERROR
-from framework.cli import _session, repo_root
+from framework.cli import _session, framework_install_root
 
 
 def _emit(req, code: int) -> int:
@@ -37,7 +37,7 @@ def _emit_pending_warning_if_any() -> None:
     Skips Jira (--no-jira) to keep the check fast and offline-safe.
     """
     try:
-        tool = repo_root() / "forge" / "tools" / "sprint-cleanup.py"
+        tool = framework_install_root() / "forge" / "tools" / "sprint-cleanup.py"
         if not tool.is_file():
             return  # tool not present in this checkout — fail-open
 

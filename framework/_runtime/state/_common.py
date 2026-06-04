@@ -53,7 +53,10 @@ def find_framework_root(start: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
-find_repo_root = find_framework_root
+# W68 SCRUM-636: legacy find_repo_root alias REMOVED. Use
+# find_framework_install_root for read-only resource discovery, or
+# Framework.output_dir for write paths. The two semantics are now distinct.
+find_framework_install_root = find_framework_root
 
 
 # --- Artifacts root (<TICKET-ID> / framework release layer; renamed <TICKET-ID>) --------------

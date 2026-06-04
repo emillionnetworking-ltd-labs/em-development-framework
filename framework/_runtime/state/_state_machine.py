@@ -116,7 +116,7 @@ COMMAND_RULES = {
 
 # ---------- Filesystem helpers ----------
 
-from framework._runtime.state._common import find_repo_root, resolve_artifacts_root, ARTIFACTS_SUBPATH  # noqa: E402
+from framework._runtime.state._common import find_framework_install_root, resolve_artifacts_root, ARTIFACTS_SUBPATH  # noqa: E402
 from framework._runtime.state._lifecycle_state import LifecycleState  # noqa: E402
 
 
@@ -447,7 +447,7 @@ def run_cli(argv=None):
 
     args = ap.parse_args(argv)
 
-    repo_root = find_repo_root(Path.cwd())
+    repo_root = find_framework_install_root(Path.cwd())
     if repo_root is None:
         print('ERROR: could not locate framework repo root (no forge/schemas/ in any parent).',
               file=sys.stderr)

@@ -27,5 +27,11 @@ from framework._runtime.state._state_machine import (  # noqa: F401
 from framework._runtime.state._validate_artifact import ValidationResult  # noqa: F401
 
 
-def repo_root() -> Path:
+def framework_install_root() -> Path:
+    """Return the framework's INSTALL location.
+
+    W68 SCRUM-636: renamed from repo_root() to make the narrowed semantic
+    explicit. Used for finding adjacent read-only resources at runtime;
+    NEVER used as a write target.
+    """
     return REPO_ROOT

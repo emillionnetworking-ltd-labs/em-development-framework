@@ -29,7 +29,8 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-SESSIONS_DIR = Path(__file__).resolve().parent / ".strategy-sessions"
+# W68 SCRUM-636: __file__-relative fallback REMOVED. Constructor REQUIRES
+# sessions_dir to be passed.
 
 # The strategist's own Pydantic models. Registering them with the serde's msgpack
 # allowlist silences LangGraph's "Deserializing unregistered type" warning on
@@ -76,7 +77,13 @@ class StrategySnapshotSaver(BaseCheckpointSaver):
 
     def __init__(self, *, sessions_dir: Optional[Path] = None, serde=None) -> None:
         super().__init__(serde=serde or strategy_serde())
-        self.sessions_dir = Path(sessions_dir) if sessions_dir else SESSIONS_DIR
+        if sessions_dir is None:
+            raise TypeError(
+                "sessions_dir is required (W68 SCRUM-636: __file__-relative "
+                "default removed). Use framework.cli._session.build_strategy_session "
+                "which derives it from Framework.output_dir, or pass an explicit Path."
+            )
+        self.sessions_dir = Path(sessions_dir)
 
     # ---- storage helpers ----
 

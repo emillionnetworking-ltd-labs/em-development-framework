@@ -8,6 +8,45 @@ For framework-protocol changelog (developer-facing append-only log of playbook c
 
 ---
 
+## [v0.23.0] — 2026-06-03 — Workspace Isolation Absolute Boundary (BREAKING)
+
+W68 SCRUM-636 hotfix closing the workspace-isolation gap that surfaced post-v0.22.0.
+
+### Breaking changes
+
+- **Legacy-mode trigger removed**: the `is_legacy_mode()` and `_legacy_paths_for_repo()` functions no longer exist in `framework.api`. Pre-0.23 environments that relied on auto-detection of dogfood mode (forge.config.yml without `output_dir`) now get the same `.em-out/` default as new users. If you need the prior behavior, set `output_dir` explicitly in your forge.config.yml.
+- **`repo_root()` hard-renamed to `framework_install_root()`**: the function `from framework.cli import repo_root` no longer works. Use `framework_install_root()`. The semantic is narrowed: this function returns the framework's INSTALL location and is used ONLY for finding adjacent read-only resources; it is NEVER a write target.
+- **Checkpointer constructors require explicit paths**: `StateYamlCheckpointer(checkpoints_dir=None)` and `StrategySnapshotSaver(sessions_dir=None)` now raise `TypeError`. Use the session builders or pass explicit paths.
+
+### Why
+
+Post-v0.22.0 testing revealed that `--output-dir` only redirected langgraph checkpoints + strategy sessions; the canonical `state.yml` + `.lifecycle/artifacts/` tree still leaked into the framework install directory. The fix per ADR-015's stated intent: `output_dir` is the ABSOLUTE root for ALL writes. The framework code tree is read-only at runtime, mechanically enforced by `framework/tests/test_workspace_boundary.py`.
+
+### Migration
+
+If you used `from framework.cli import repo_root`, replace with `from framework.cli import framework_install_root`.
+
+If you relied on dogfood-mode auto-detection, set `output_dir` explicitly in `forge.config.yml` (e.g., `output_dir: "."` to preserve repo-relative writes; or accept the `.em-out/` default).
+
+If you previously expected `state.yml` to land at `<framework-install>/.lifecycle/artifacts/...`: it now lives at `<output_dir>/.lifecycle/artifacts/...`. This is the long-promised workspace isolation.
+
+---
+
+## [v0.22.0] — 2026-06-03 — Core Decoupling + Workspace Isolation
+
+Sprint 28 SEAL — framework re-architected as commercial-grade product per ADR-015 P1-Refined.
+
+Distribution shape: 75 files. Public API: `from framework import Framework; Framework(output_dir="./workspace")`.
+
+### Highlights
+
+- Module relocation: orchestrator/* → framework/_runtime/orchestrator/
+- 5-level config precedence (CLI > class > env > config > default)
+- IP isolation: forge/specs + .playbooks + .agents PRIVATE-only
+- 12 active Open-Core compliance invariants
+
+---
+
 ## [v0.19.0] — 2026-05-31 — Clean Distribution Pipeline (first release)
 
 First GitHub Release of the framework as a **clean distribution artifact**. Prior git tags (v0.5.0–v0.18.1) were commit markers only with no Release assets.

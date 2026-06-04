@@ -16,7 +16,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ._deps import LifecycleState, Deviation, ValidationResult, load_state_typed, state_path, repo_root
+from ._deps import LifecycleState, Deviation, ValidationResult, load_state_typed, state_path, framework_install_root
 
 
 class GraphState(BaseModel):
@@ -51,7 +51,12 @@ class GraphState(BaseModel):
     @classmethod
     def from_disk(cls, module: str, ticket: str, root: Optional[str] = None) -> "GraphState":
         """Hydrate from the canonical state.yml (the one graph-entry disk read)."""
-        root_path = root or str(repo_root())
+        # W68 SCRUM-636: framework_install_root() is the LAST-RESORT fallback
+        # for explicit-None root. In normal flow, the session builder passes
+        # the user's artifact_root (Framework.output_dir-derived). The fallback
+        # exists for backwards-compat with tests that don't go through the
+        # session builder. NEW callers should always pass `root` explicitly.
+        root_path = root or str(framework_install_root())
         sp = state_path(Path(root_path), module, ticket)
         lifecycle = load_state_typed(sp)
         if lifecycle is None:

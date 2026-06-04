@@ -32,10 +32,12 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from ._deps import (
-    LifecycleState, save_state, state_path, _StateLock, repo_root,
+    LifecycleState, save_state, state_path, _StateLock, framework_install_root,
 )
 
-CHECKPOINTS_DIR = Path(__file__).resolve().parent / ".checkpoints"
+# W68 SCRUM-636: __file__-relative fallback REMOVED. Constructor REQUIRES
+# checkpoints_dir to be passed (no default). Callers must compute the path
+# via the session builder which derives it from Framework.output_dir.
 
 # The lifecycle types carried in the graph channels. Registering them with the
 # serde's msgpack allowlist silences LangGraph's "Deserializing unregistered type"
@@ -88,8 +90,16 @@ class StateYamlCheckpointer(BaseCheckpointSaver):
     def __init__(self, *, checkpoints_dir: Optional[Path] = None, root: Optional[str] = None,
                  serde=None) -> None:
         super().__init__(serde=serde or lifecycle_serde())
-        self.checkpoints_dir = Path(checkpoints_dir) if checkpoints_dir else CHECKPOINTS_DIR
-        self.root = root or str(repo_root())
+        if checkpoints_dir is None:
+            raise TypeError(
+                "checkpoints_dir is required (W68 SCRUM-636: __file__-relative "
+                "default removed). Use framework.cli._session.build_lifecycle_session "
+                "which derives it from Framework.output_dir, or pass an explicit Path."
+            )
+        self.checkpoints_dir = Path(checkpoints_dir)
+        # W68 SCRUM-636: framework_install_root() is the LAST-RESORT fallback.
+        # In normal flow, session builder passes the user's artifact_root.
+        self.root = root or str(framework_install_root())
 
     # ---- storage helpers ----
 

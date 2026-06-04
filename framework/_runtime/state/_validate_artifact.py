@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict
 
 # Post W64 SCRUM-632: framework/_runtime/state/ IS a package — use absolute
 # imports. forge/tools/ original copies retain ADR-006 bare-import pattern.
-from framework._runtime.state._common import find_repo_root  # noqa: E402
+from framework._runtime.state._common import find_framework_install_root  # noqa: E402
 
 try:
     import yaml
@@ -332,7 +332,7 @@ def validate(file_path, schema_override=None, strict_groundedness=False,
     # Resolve + load. Schemas live in the ENGINE, so resolve from the
     # framework root (cwd-independent default), NOT by walking up from the
     # artifact — the artifact may live in a separate governed repo. <TICKET-ID>.
-    repo_root = find_repo_root()
+    repo_root = find_framework_install_root()
     try:
         schema, schema_path = load_schema(schema_ref, repo_root)
     except (FileNotFoundError, ValueError) as e:
